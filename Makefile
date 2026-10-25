@@ -15,12 +15,16 @@ else
 endif
 
 BUILD_DIR = build
+BIN = $(BUILD_DIR)/qala_agent
 LIB = $(BUILD_DIR)/libqala.$(LIB_EXT)
 
-all: $(BUILD_DIR) $(LIB) $(BUILD_DIR)/test_qala $(BUILD_DIR)/test_grounding $(BUILD_DIR)/test_mcp_client $(BUILD_DIR)/test_mcp_interop
+all: $(BUILD_DIR) $(BIN) $(LIB) $(BUILD_DIR)/test_qala $(BUILD_DIR)/test_grounding $(BUILD_DIR)/test_mcp_client $(BUILD_DIR)/test_mcp_interop
 
 $(BUILD_DIR):
 	mkdir -p $(BUILD_DIR)
+
+$(BIN): src/qala_agent.c adapters/qala_mcp_policy_adapter.c adapters/grounding_shield.c adapters/mcp_curl_client.c adapters/cJSON.c | $(BUILD_DIR)
+	$(CC) $(CFLAGS) $^ $(LDFLAGS) -o $@
 
 $(LIB): adapters/qala_mcp_policy_adapter.c adapters/grounding_shield.c adapters/mcp_curl_client.c adapters/cJSON.c | $(BUILD_DIR)
 	$(CC) $(CFLAGS) -fPIC $(SHARED_FLAGS) $^ $(LDFLAGS) -o $(LIB)
@@ -38,6 +42,10 @@ $(BUILD_DIR)/test_mcp_interop: tests/test_mcp_interop.c adapters/mcp_curl_client
 	$(CC) $(CFLAGS) $^ $(LDFLAGS) -o $@
 
 test: all
+	@echo "=================================================================="
+	@echo " RUNNING QALA NATIVE CLI ACCEPTANCE BATTERY"
+	@echo "=================================================================="
+	./$(BIN) --test
 	@echo "=================================================================="
 	@echo " RUNNING QALA POLICY GATE & GROUNDING SHIELD TEST SUITE"
 	@echo "=================================================================="
@@ -59,6 +67,6 @@ test: all
 
 clean:
 	rm -rf $(BUILD_DIR)
-	rm -f qala-audit.jsonl *.audit.jsonl qala-tokens.jsonl *.tokens.jsonl
+	rm -f qala-audit.jsonl *.audit.jsonl qala-tokens.jsonl *.tokens.jsonl *.jsonl data/*.jsonl
 
 .PHONY: all test clean
