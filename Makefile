@@ -63,6 +63,11 @@ test: all
 	kill $$SERVER_PID 2>/dev/null || true; \
 	wait $$SERVER_PID 2>/dev/null || true; \
 	exit $$STATUS
+	@echo "[SUCCESS] All 9 MCP Interoperability Tests Passed Deterministically!"
+	@echo "=================================================================="
+	@echo " RUNNING QALA PROMPT INJECTION DEFENSE TEST SUITE"
+	@echo "=================================================================="
+	python3 tests/test_qala_injection_defense.py
 	@echo "[SUCCESS] All Qala Agent verification suites passed deterministically!"
 
 clean:
