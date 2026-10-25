@@ -11,7 +11,8 @@
 2. **Clear & Simple Language:** Always discuss problems, trade-offs, and architecture in **clear, simple, everyday English**. Never overwhelm the operator with dense jargon or complex multiple-choice interrogations.
 3. **Research-First Protocol:** **NEVER guess, assume, or invent policy rules or trade architectures.** Always ask Mohamed for domain research or enterprise guidelines before making major decisions.
 4. **Engineering First (Strictly No Hype):** Focus 100% on **building, hardening, and testing the software code**. Do NOT talk about pitch decks, demo videos, or peripheral marketing until the agent code is 100% complete and passing tests.
-5. **Tri-Mirror Synchronization:** The local folder, Google Drive mirror, and GitHub repo **must remain 100% identical mirrors at all times**. Whenever code or documentation is created or modified, run `./sync_mirror.sh` to update both Google Drive and GitHub immediately.
+5. **Do Not Reinvent the Wheel — Start Where Others Reached:** Never build from scratch what already exists. Leverage established libraries (`cJSON`, `libcurl`) and in-house battle-tested assets like **Gomaa (`https://github.com/M4F-S/gomaa`)** for prompt injection defense suites (`test_injection_defense.py`) and standard JSON-RPC 2.0 MCP server architecture.
+6. **Tri-Mirror Synchronization:** The local folder, Google Drive mirror, and GitHub repo **must remain 100% identical mirrors at all times**. Whenever code or documentation is created or modified, run `./sync_mirror.sh` to update both Google Drive and GitHub immediately.
 
 ---
 

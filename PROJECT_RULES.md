@@ -36,14 +36,17 @@ To ensure our work survives the most rigorous technical and regulatory scrutiny 
 
 ---
 
-### RULE 3: DO NOT REINVENT THE WHEEL
-> **"Rely on established, battle-tested standards and robust libraries."**
-1. Use standard ISO C99 (`-std=c99 -Wall -Wextra -Werror -O2`) with POSIX feature test macros (`#define _POSIX_C_SOURCE 200809L` and `#define _XOPEN_SOURCE 700`) to guarantee deterministic compilation on Linux glibc and macOS clang.
-2. Use established standard libraries:
-   - Networking & HTTP: Standard `libcurl`.
-   - Serialization: Standard `cJSON`.
-   - Cryptographic primitives: Standard NIST SHA-256 / HMAC.
-   - Healthcare Interoperability: Fast Healthcare Interoperability Resources (FHIR R4) and SMART on FHIR conventions.
+### RULE 3: DO NOT REINVENT THE WHEEL — START WHERE OTHERS REACHED
+> **"Never build from scratch what already exists as proven, battle-tested architecture."**
+1. **Leverage Existing In-House Assets:**
+   - **Gomaa (`https://github.com/M4F-S/gomaa`):** Production-grade autonomous memory OS with 4-quadrant cognitive architecture (Episodic, Semantic, Procedural, Working), HippoRAG 2 associative retrieval, 3-phase biological sleep consolidation, Ebbinghaus temporal decay, and MCP server integration (126 passing tests). Integrate Gomaa directly for agent cognitive memory rather than inventing ad-hoc storage.
+   - **Belya (`M4F-S/Belya`):** Deterministic compiled C99 execution, sandboxing, and compiler watchdogs.
+   - **Almaz (`M4F-S/Almaz`):** Cognitive self-modeling and longitudinal memory principles.
+2. **Rely on Battle-Tested Standards & Libraries:**
+   - Use standard ISO C99 (`-std=c99 -Wall -Wextra -Werror -O2`) with POSIX feature test macros (`#define _POSIX_C_SOURCE 200809L` and `#define _XOPEN_SOURCE 700`).
+   - Use standard `libcurl` for HTTP/SSE transport and standard `cJSON` for JSON-RPC 2.0 serialization.
+   - Use standard NIST SHA-256 / HMAC for cryptographic integrity.
+   - For healthcare interoperability, build directly upon FHIR R4 and SMART on FHIR conventions.
 3. Avoid ad-hoc, brittle custom protocols where standard HTTP/JSON-RPC 2.0 or WebSocket (RFC 6455) interfaces exist.
 
 ---
