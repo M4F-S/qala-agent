@@ -59,6 +59,6 @@ test: all
 
 clean:
 	rm -rf $(BUILD_DIR)
-	rm -f qala-audit.jsonl *.audit.jsonl
+	rm -f qala-audit.jsonl *.audit.jsonl qala-tokens.jsonl *.tokens.jsonl
 
 .PHONY: all test clean

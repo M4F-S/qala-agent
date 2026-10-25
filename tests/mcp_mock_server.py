@@ -177,6 +177,96 @@ class MCPMockHandler(BaseHTTPRequestHandler):
                             }
                         },
                         {
+                            "name": "customs/calculate_duty",
+                            "description": "Calculates GCC Unified Customs Tariff (5% standard) and UAE VAT (5%) on Cost, Insurance and Freight (CIF) value for DP World container arrivals",
+                            "inputSchema": {
+                                "type": "object",
+                                "properties": {
+                                    "hs_code": {
+                                        "type": "string",
+                                        "description": "Harmonized System 6-to-8 digit tariff classification code (e.g. 8471.30.00)"
+                                    },
+                                    "cif_value_aed": {
+                                        "type": "number",
+                                        "description": "Cost, Insurance, and Freight (CIF) declared shipment value in AED"
+                                    },
+                                    "origin_country": {
+                                        "type": "string",
+                                        "description": "ISO 3166-1 alpha-2 origin country code (e.g. AE, US, CN, DE)"
+                                    },
+                                    "free_zone_exit": {
+                                        "type": "boolean",
+                                        "description": "True if cargo is exiting JAFZA / DAFZA into UAE mainland domestic market"
+                                    }
+                                },
+                                "required": ["hs_code", "cif_value_aed"]
+                            }
+                        },
+                        {
+                            "name": "customs/clear_shipment",
+                            "description": "Submits Dubai Customs Mirsal II / DP World container import declaration and generates electronic release order (RO)",
+                            "inputSchema": {
+                                "type": "object",
+                                "properties": {
+                                    "bill_of_lading": {
+                                        "type": "string",
+                                        "description": "Ocean carrier master or house bill of lading number (e.g. BL-DPW-99214)"
+                                    },
+                                    "container_id": {
+                                        "type": "string",
+                                        "description": "ISO 6346 compliant container identifier (e.g. MSCU8291043)"
+                                    },
+                                    "importer_code": {
+                                        "type": "string",
+                                        "description": "Dubai Customs Client / Importer Registration Code (e.g. DXB-IMP-77102)"
+                                    },
+                                    "duty_amount_aed": {
+                                        "type": "number",
+                                        "description": "Total customs tariff and VAT settlement amount in AED"
+                                    },
+                                    "port_code": {
+                                        "type": "string",
+                                        "description": "UN/LOCODE port code ('AEJEA' for Jebel Ali, 'AEDXB' for Port Rashid)"
+                                    },
+                                    "declaration_type": {
+                                        "type": "string",
+                                        "description": "Import declaration type ('IMPORT_LOCAL', 'IMPORT_FREEZONE', 'TRANSIT')"
+                                    },
+                                    "approval_token": {
+                                        "type": "string",
+                                        "description": "Single-use cryptographic approval code required if duty_amount_aed > AED 50,000"
+                                    }
+                                },
+                                "required": ["bill_of_lading", "container_id", "importer_code", "duty_amount_aed"]
+                            }
+                        },
+                        {
+                            "name": "vat/reconcile_invoice",
+                            "description": "Reconciles corporate commercial invoice against UAE Federal Tax Authority (FTA) 5% VAT rules and customs entry bill",
+                            "inputSchema": {
+                                "type": "object",
+                                "properties": {
+                                    "invoice_number": {
+                                        "type": "string",
+                                        "description": "Commercial tax invoice reference number"
+                                    },
+                                    "tax_registration_number": {
+                                        "type": "string",
+                                        "description": "15-digit UAE FTA Tax Registration Number (TRN)"
+                                    },
+                                    "net_amount_aed": {
+                                        "type": "number",
+                                        "description": "Net taxable invoice amount before VAT in AED"
+                                    },
+                                    "vat_amount_aed": {
+                                        "type": "number",
+                                        "description": "Claimed VAT amount in AED (must match 5% of net)"
+                                    }
+                                },
+                                "required": ["invoice_number", "tax_registration_number", "net_amount_aed", "vat_amount_aed"]
+                            }
+                        },
+                        {
                             "name": "dha_delay_penalty_calculator",
                             "description": "Calculates DHA SN 03/2019 0.03%/day late claim penalties",
                             "inputSchema": {
@@ -197,11 +287,53 @@ class MCPMockHandler(BaseHTTPRequestHandler):
         elif mcp_method == "tools/call":
             tool_name = params.get("name")
             arguments = params.get("arguments", {})
+            is_error = False
 
             if tool_name == "customs_duty_calculator":
                 val = float(arguments.get("declared_value_aed", 0.0))
                 duty = val * 0.05
                 text_out = f"Calculated Duty: AED {duty:.2f} (5% standard tariff on AED {val:.2f})"
+            elif tool_name == "customs/calculate_duty":
+                cif = float(arguments.get("cif_value_aed", arguments.get("declared_value_aed", 0.0)))
+                hs = arguments.get("hs_code", "8471.30.00")
+                origin = arguments.get("origin_country", "AE")
+                duty = cif * 0.05
+                vat = (cif + duty) * 0.05
+                total = duty + vat
+                text_out = (
+                    f"DP World Customs Tariff Assessment (HS {hs}, Origin {origin}): "
+                    f"CIF: AED {cif:.2f} | Customs Duty (5%): AED {duty:.2f} | "
+                    f"UAE VAT (5% on CIF+Duty): AED {vat:.2f} | Total Settlement: AED {total:.2f}"
+                )
+            elif tool_name == "customs/clear_shipment":
+                bol = arguments.get("bill_of_lading", "BL-UNKNOWN")
+                container = arguments.get("container_id", "CONT-UNKNOWN")
+                imp_code = arguments.get("importer_code", "IMP-UNKNOWN")
+                duty = float(arguments.get("duty_amount_aed", 0.0))
+                port = arguments.get("port_code", "AEJEA")
+                token = arguments.get("approval_token")
+
+                if duty > 50000.0 and (not token or not str(token).strip()):
+                    text_out = f"REJECTED: Shipment clearance for container {container} (AED {duty:.2f}) exceeds AED 50,000 threshold and requires approval_token"
+                    is_error = True
+                else:
+                    text_out = (
+                        f"DP World Mirsal II Electronic Release Order Issued: "
+                        f"Release Order: RO-DPW-2026-88192 | Container: {container} | Port: {port} | "
+                        f"Importer: {imp_code} | Customs Duty Settled: AED {duty:.2f} | "
+                        f"Status: CLEARED (Gate Pass Valid 72 Hours)"
+                    )
+            elif tool_name == "vat/reconcile_invoice":
+                inv = arguments.get("invoice_number", "INV-UNKNOWN")
+                trn = arguments.get("tax_registration_number", "000000000000000")
+                net = float(arguments.get("net_amount_aed", 0.0))
+                vat = float(arguments.get("vat_amount_aed", 0.0))
+                expected_vat = round(net * 0.05, 2)
+                if abs(vat - expected_vat) > 0.05:
+                    text_out = f"FTA VAT MISMATCH: Invoice {inv} TRN {trn} expected VAT AED {expected_vat:.2f} but claimed AED {vat:.2f}"
+                    is_error = True
+                else:
+                    text_out = f"FTA VAT RECONCILED: Invoice {inv} TRN {trn} net AED {net:.2f} matches 5% statutory VAT AED {vat:.2f}"
             elif tool_name == "dha_delay_penalty_calculator":
                 claim_id = arguments.get("claim_id", "CLM-UNKNOWN")
                 days = int(arguments.get("delay_days", 0))
@@ -220,7 +352,7 @@ class MCPMockHandler(BaseHTTPRequestHandler):
                             "text": text_out
                         }
                     ],
-                    "isError": False
+                    "isError": is_error
                 }
             }
             self.send_sse_frame(res)

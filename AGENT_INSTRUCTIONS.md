@@ -33,10 +33,10 @@ Qala is an autonomous enterprise policy gatekeeper and trade settlement agent:
 
 ### 4. IMMEDIATE ENGINEERING ROADMAP
 When continuing development in this session, focus on these concrete coding tasks:
-- [ ] **Task 1: Dynamic `/workspace` Containment:** Upgrade `adapters/qala_mcp_policy_adapter.c` from static token denylisting to strict canonical path prefix matching using `realpath()`.
-- [ ] **Task 2: Persistent Dual-Key Token Lifecycle:** Implement persistent on-disk state (JSONL or SQLite) for single-use approval codes so restarts do not re-arm consumed tokens.
-- [ ] **Task 3: Real Customs & Logistics Tool Definitions:** Add realistic JSON-RPC tool schemas for DP World container clearance (`customs/clear_shipment`, `customs/calculate_duty`, `vat/reconcile_invoice`).
-- [ ] **Task 4: Build & Test Verification:** Run `make clean && make test` and ensure all suites pass with zero warnings.
+- [x] **Task 1: Dynamic `/workspace` Containment:** Upgrade `adapters/qala_mcp_policy_adapter.c` from static token denylisting to strict canonical path prefix matching using `realpath()`.
+- [x] **Task 2: Persistent Dual-Key Token Lifecycle:** Implement persistent on-disk state (JSONL or SQLite) for single-use approval codes so restarts do not re-arm consumed tokens.
+- [x] **Task 3: Real Customs & Logistics Tool Definitions:** Add realistic JSON-RPC tool schemas for DP World container clearance (`customs/clear_shipment`, `customs/calculate_duty`, `vat/reconcile_invoice`).
+- [x] **Task 4: Build & Test Verification:** Run `make clean && make test` and ensure all suites pass with zero warnings.
 
 ---
 

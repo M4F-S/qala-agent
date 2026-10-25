@@ -9,6 +9,8 @@ build/
 # Runtime logs
 qala-audit.jsonl
 *.audit.jsonl
+qala-tokens.jsonl
+*.tokens.jsonl
 __pycache__/
 *.pyc
 

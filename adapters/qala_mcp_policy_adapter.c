@@ -10,6 +10,7 @@
 
 #include <stdio.h>
 #include <string.h>
+#include <strings.h>
 #include <stdbool.h>
 #include <stdlib.h>
 #include <stdint.h>
@@ -17,6 +18,12 @@
 #include <limits.h>
 #include <math.h>
 #include <libgen.h>
+#include <unistd.h>
+#include <sys/stat.h>
+
+#ifndef PATH_MAX
+#define PATH_MAX 4096
+#endif
 
 #ifdef __linux__
 #include <sys/prctl.h>
@@ -68,6 +75,139 @@ static void json_escape_string(const char *src, char *dst, size_t dst_cap) {
     dst[w] = '\0';
 }
 
+/* DESC ISR v3.1 Workspace Sandboxing Configuration */
+static char g_workspace_root[PATH_MAX] = "/workspace";
+
+void qala_set_workspace_root(const char *root) {
+    if (root && root[0] != '\0') {
+        snprintf(g_workspace_root, sizeof(g_workspace_root), "%s", root);
+    } else {
+        snprintf(g_workspace_root, sizeof(g_workspace_root), "/workspace");
+    }
+}
+
+const char *qala_get_workspace_root(void) {
+    const char *env = getenv("QALA_WORKSPACE_ROOT");
+    if (env && env[0] != '\0') {
+        return env;
+    }
+    return g_workspace_root;
+}
+
+/* Persistent Single-Use Approval Token Store Configuration */
+static char g_token_store_path[PATH_MAX] = "qala-tokens.jsonl";
+
+void qala_set_token_store_path(const char *path) {
+    if (path && path[0] != '\0') {
+        snprintf(g_token_store_path, sizeof(g_token_store_path), "%s", path);
+    } else {
+        snprintf(g_token_store_path, sizeof(g_token_store_path), "qala-tokens.jsonl");
+    }
+}
+
+const char *qala_get_token_store_path(void) {
+    const char *env = getenv("QALA_TOKEN_STORE_PATH");
+    if (env && env[0] != '\0') {
+        return env;
+    }
+    return g_token_store_path;
+}
+
+bool qala_token_store_is_consumed(const char *store_path, const char *token) {
+    if (!token || token[0] == '\0') return false;
+    const char *path = store_path ? store_path : qala_get_token_store_path();
+    FILE *fp = fopen(path, "r");
+    if (!fp) return false;
+
+    char line[1024];
+    bool is_consumed = false;
+
+    while (fgets(line, sizeof(line), fp)) {
+        char *tok_key = strstr(line, "\"token\":\"");
+        if (!tok_key) continue;
+        tok_key += 9; /* Skip "\"token\":\"" */
+        char *tok_end = strchr(tok_key, '"');
+        if (!tok_end) continue;
+
+        size_t tok_len = (size_t)(tok_end - tok_key);
+        if (tok_len >= 64) continue;
+
+        char found_token[64];
+        memcpy(found_token, tok_key, tok_len);
+        found_token[tok_len] = '\0';
+
+        if (constant_time_streq(found_token, token)) {
+            if (strstr(line, "\"consumed\":true") != NULL) {
+                is_consumed = true;
+                break;
+            }
+        }
+    }
+
+    fclose(fp);
+    return is_consumed;
+}
+
+int qala_token_store_record_consumed(
+    const char *store_path,
+    const char *token,
+    const char *scope,
+    const char *tool_name,
+    double      amount_aed,
+    uint64_t    consumed_utc
+) {
+    if (!token || token[0] == '\0') return -1;
+    const char *path = store_path ? store_path : qala_get_token_store_path();
+    FILE *fp = fopen(path, "a");
+    if (!fp) return -2;
+
+    char esc_token[128];
+    char esc_scope[64];
+    char esc_tool[128];
+    json_escape_string(token, esc_token, sizeof(esc_token));
+    json_escape_string(scope ? scope : "default", esc_scope, sizeof(esc_scope));
+    json_escape_string(tool_name ? tool_name : "unknown", esc_tool, sizeof(esc_tool));
+
+    double safe_amount = isfinite(amount_aed) ? amount_aed : 0.0;
+
+    fprintf(fp,
+        "{\"timestamp_utc\":%llu,\"token\":\"%s\",\"scope\":\"%s\",\"tool\":\"%s\","
+        "\"amount_aed\":%.2f,\"consumed\":true}\n",
+        (unsigned long long)consumed_utc,
+        esc_token,
+        esc_scope,
+        esc_tool,
+        safe_amount
+    );
+
+    fflush(fp);
+#if defined(_POSIX_C_SOURCE) || defined(__APPLE__) || defined(__linux__)
+    int fd = fileno(fp);
+    if (fd >= 0) {
+        (void)fsync(fd);
+    }
+#endif
+    fclose(fp);
+    return 0;
+}
+
+int qala_token_store_sync_slots(
+    const char           *store_path,
+    qala_approval_slot_t *slots,
+    size_t                slot_count
+) {
+    if (!slots || slot_count == 0) return 0;
+    const char *path = store_path ? store_path : qala_get_token_store_path();
+    for (size_t i = 0; i < slot_count; ++i) {
+        if (!slots[i].consumed) {
+            if (qala_token_store_is_consumed(path, slots[i].token)) {
+                slots[i].consumed = true;
+            }
+        }
+    }
+    return 0;
+}
+
 /* AF-07 Fix: Expanded restricted system and confidential tokens */
 static const char *RESTRICTED_TOKENS[] = {
     "confidential",
@@ -78,52 +218,256 @@ static const char *RESTRICTED_TOKENS[] = {
     "/dev",
     ".ssh",
     "id_rsa",
+    "id_ed25519",
+    "id_ecdsa",
+    "id_dsa",
     ".env",
+    ".aws",
     "uae_citizens.db",
     "customers_pii.db",
     "nabidh_patient_master.db",
     NULL
 };
 
-/* F-06 Fix: Hardened path verification using strict canonicalization and allowlist checks */
-static bool is_restricted_path_hardened(const char *raw_path, const char *raw_args) {
-    const char *inputs[2] = { raw_path, raw_args };
-    for (int k = 0; k < 2; ++k) {
-        const char *s = inputs[k];
-        if (!s || s[0] == '\0') continue;
-        /* Block path traversal and unicode escape sequences */
-        if (strstr(s, "..") != NULL) return true;
-        if (strstr(s, "\\u002e") != NULL || strstr(s, "\\u002E") != NULL) return true;
-        for (int i = 0; RESTRICTED_TOKENS[i] != NULL; ++i) {
-            if (strstr(s, RESTRICTED_TOKENS[i]) != NULL) return true;
-        }
-    }
-
-    if (raw_path && raw_path[0] != '\0') {
-        char resolved[PATH_MAX];
-        if (realpath(raw_path, resolved) != NULL) {
-            for (int i = 0; RESTRICTED_TOKENS[i] != NULL; ++i) {
-                if (strstr(resolved, RESTRICTED_TOKENS[i]) != NULL) return true;
-            }
-        } else {
-            /* File does not exist yet: check parent directory to prevent symlink escape */
-            char path_copy[PATH_MAX];
-            snprintf(path_copy, sizeof(path_copy), "%s", raw_path);
-            path_copy[sizeof(path_copy) - 1] = '\0';
-            char *parent = dirname(path_copy);
-            if (parent && realpath(parent, resolved) != NULL) {
-                for (int i = 0; RESTRICTED_TOKENS[i] != NULL; ++i) {
-                    if (strstr(resolved, RESTRICTED_TOKENS[i]) != NULL) return true;
-                }
-            } else {
-                /* Parent also unreachable/invalid: fail-closed if confidential/etc */
-                for (int i = 0; RESTRICTED_TOKENS[i] != NULL; ++i) {
-                    if (strstr(raw_path, RESTRICTED_TOKENS[i]) != NULL) return true;
-                }
-            }
+static bool contains_forbidden_token(const char *str) {
+    if (!str) return false;
+    for (int i = 0; RESTRICTED_TOKENS[i] != NULL; ++i) {
+        if (strstr(str, RESTRICTED_TOKENS[i]) != NULL) {
+            return true;
         }
     }
     return false;
+}
+
+static bool has_forbidden_extension(const char *path) {
+    if (!path) return false;
+    size_t len = strlen(path);
+    const char *exts[] = {
+        ".pem", ".key", ".crt", ".pfx", ".p12", ".secret", ".token", NULL
+    };
+    for (int i = 0; exts[i] != NULL; ++i) {
+        size_t ext_len = strlen(exts[i]);
+        if (len >= ext_len && strcasecmp(path + len - ext_len, exts[i]) == 0) {
+            return true;
+        }
+    }
+    return false;
+}
+
+static bool has_traversal_sequence(const char *str) {
+    if (!str) return false;
+    if (strstr(str, "..") != NULL) return true;
+    if (strstr(str, "%2e%2e") != NULL || strstr(str, "%2E%2E") != NULL) return true;
+    if (strstr(str, "%2e%2E") != NULL || strstr(str, "%2E%2e") != NULL) return true;
+    if (strstr(str, "\\u002e") != NULL || strstr(str, "\\u002E") != NULL) return true;
+    if (strstr(str, "%252e") != NULL || strstr(str, "%252E") != NULL) return true;
+    return false;
+}
+
+/* Lexically normalizes an absolute path string, resolving "." and ".." components.
+ * Returns true if valid, false if invalid or attempts traversal above root ("/").
+ */
+static bool normalize_path_lexical(const char *src, char *dst, size_t dst_cap) {
+    if (!src || !dst || dst_cap < 2) return false;
+
+    char temp[PATH_MAX];
+    size_t src_len = strlen(src);
+    if (src_len >= sizeof(temp)) return false;
+    memcpy(temp, src, src_len + 1);
+
+    const char *segments[256];
+    size_t seg_lens[256];
+    size_t seg_count = 0;
+
+    bool is_absolute = (temp[0] == '/');
+    char *p = temp;
+
+    while (*p != '\0') {
+        while (*p == '/') p++;
+        if (*p == '\0') break;
+
+        char *start = p;
+        while (*p != '\0' && *p != '/') p++;
+        if (*p != '\0') {
+            *p = '\0';
+            p++;
+        }
+
+        if (strcmp(start, ".") == 0) {
+            continue;
+        } else if (strcmp(start, "..") == 0) {
+            if (seg_count > 0) {
+                seg_count--;
+            } else if (is_absolute) {
+                /* Traversal above root */
+                return false;
+            } else {
+                return false;
+            }
+        } else {
+            if (seg_count < 256) {
+                segments[seg_count] = start;
+                seg_lens[seg_count] = strlen(start);
+                seg_count++;
+            } else {
+                return false; /* Excessively deep path */
+            }
+        }
+    }
+
+    size_t w = 0;
+    if (is_absolute) {
+        if (w + 1 >= dst_cap) return false;
+        dst[w++] = '/';
+    }
+
+    for (size_t i = 0; i < seg_count; ++i) {
+        if (i > 0 || !is_absolute) {
+            if (w + 1 >= dst_cap) return false;
+            dst[w++] = '/';
+        }
+        if (w + seg_lens[i] >= dst_cap) return false;
+        memcpy(dst + w, segments[i], seg_lens[i]);
+        w += seg_lens[i];
+    }
+
+    if (w == 0 && is_absolute) {
+        dst[0] = '/';
+        w = 1;
+    }
+    dst[w] = '\0';
+    return true;
+}
+
+/* Resolves a path to canonical representation using realpath() where filesystem targets
+ * or existing ancestors exist, with fail-closed fallback to lexical normalization.
+ */
+static bool resolve_canonical_path(const char *input_path, char *out_canonical, size_t cap) {
+    if (!input_path || input_path[0] == '\0' || !out_canonical || cap < 2) {
+        return false;
+    }
+
+    const char *ws_root = qala_get_workspace_root();
+    char full[PATH_MAX];
+
+    if (input_path[0] == '/') {
+        snprintf(full, sizeof(full), "%s", input_path);
+    } else {
+        snprintf(full, sizeof(full), "%s/%s", ws_root, input_path);
+    }
+
+    /* 1. Attempt kernel realpath directly (resolves symlinks) */
+    char resolved[PATH_MAX];
+    if (realpath(full, resolved) != NULL) {
+        if (strlen(resolved) >= cap) return false;
+        snprintf(out_canonical, cap, "%s", resolved);
+        return true;
+    }
+
+    /* 2. File does not exist yet: find nearest existing parent directory and realpath it */
+    char path_copy[PATH_MAX];
+    snprintf(path_copy, sizeof(path_copy), "%s", full);
+    char *parent = dirname(path_copy);
+
+    if (parent && parent[0] != '\0' && realpath(parent, resolved) != NULL) {
+        char base_copy[PATH_MAX];
+        snprintf(base_copy, sizeof(base_copy), "%s", full);
+        char *bname = basename(base_copy);
+        if (bname && strcmp(bname, ".") != 0 && strcmp(bname, "..") != 0) {
+            char combined[PATH_MAX];
+            if (strcmp(resolved, "/") == 0) {
+                snprintf(combined, sizeof(combined), "/%s", bname);
+            } else {
+                snprintf(combined, sizeof(combined), "%s/%s", resolved, bname);
+            }
+            return normalize_path_lexical(combined, out_canonical, cap);
+        }
+    }
+
+    /* 3. Neither file nor parent directory exists on host: normalize lexically */
+    return normalize_path_lexical(full, out_canonical, cap);
+}
+
+/* Verifies that canonical_path strictly resides within canonical_ws_root.
+ * e.g., /workspace/file.json resides in /workspace,
+ * but /workspace2/file or /etc/passwd does NOT.
+ */
+static bool is_within_workspace(const char *canonical_path, const char *canonical_ws_root) {
+    if (!canonical_path || !canonical_ws_root) return false;
+
+    size_t ws_len = strlen(canonical_ws_root);
+    while (ws_len > 1 && canonical_ws_root[ws_len - 1] == '/') {
+        ws_len--;
+    }
+
+    if (ws_len == 1 && canonical_ws_root[0] == '/') {
+        return true;
+    }
+
+    if (strncmp(canonical_path, canonical_ws_root, ws_len) != 0) {
+        return false;
+    }
+
+    char next = canonical_path[ws_len];
+    return (next == '/' || next == '\0');
+}
+
+/* DESC ISR v3.1 Kernel Sandbox & Dynamic /workspace Containment Gate.
+ * Enforces:
+ *   1. Traversal blocking (.., %2e%2e, \u002e) in raw path and JSON payload.
+ *   2. Rejection of secret leaks (.env, .pem, .key, id_rsa, confidential DBs).
+ *   3. Strict canonical containment within authorized workspace root via realpath().
+ * Returns true if the access is RESTRICTED (denied / unsafe).
+ * Returns false only if access is safe and fully contained within authorized workspace.
+ */
+static bool is_restricted_path_hardened(const char *raw_path, const char *raw_args) {
+    /* 1. Inspect raw arguments JSON for traversal sequences or secret leaks */
+    if (raw_args && raw_args[0] != '\0') {
+        if (has_traversal_sequence(raw_args)) return true;
+        if (contains_forbidden_token(raw_args)) return true;
+    }
+
+    /* If no filesystem target path was specified, and raw_args is clean, not restricted */
+    if (!raw_path || raw_path[0] == '\0') {
+        return false;
+    }
+
+    /* 2. Check raw path string directly for traversal sequences */
+    if (has_traversal_sequence(raw_path)) {
+        return true;
+    }
+
+    /* 3. Check for forbidden tokens and secret file extensions in raw path */
+    if (contains_forbidden_token(raw_path) || has_forbidden_extension(raw_path)) {
+        return true;
+    }
+
+    /* 4. Resolve canonical path via realpath() and lexical normalization */
+    char canonical_path[PATH_MAX];
+    if (!resolve_canonical_path(raw_path, canonical_path, sizeof(canonical_path))) {
+        return true; /* Fail-closed on invalid path syntax or traversal above root */
+    }
+
+    /* 5. Check resolved canonical path for secret tokens and extensions */
+    if (contains_forbidden_token(canonical_path) || has_forbidden_extension(canonical_path)) {
+        return true;
+    }
+
+    /* 6. Resolve canonical workspace root via realpath() if it exists */
+    const char *configured_ws = qala_get_workspace_root();
+    char canonical_ws[PATH_MAX];
+    if (realpath(configured_ws, canonical_ws) == NULL) {
+        if (!normalize_path_lexical(configured_ws, canonical_ws, sizeof(canonical_ws))) {
+            return true; /* Fail-closed */
+        }
+    }
+
+    /* 7. Strict prefix containment verification */
+    if (!is_within_workspace(canonical_path, canonical_ws)) {
+        return true; /* Escaped workspace containment boundary */
+    }
+
+    return false; /* Path is safe and strictly contained within workspace */
 }
 
 static const char *verdict_to_str(qala_verdict_t v) {
@@ -243,17 +587,51 @@ qala_policy_result_t policy_verify_call(
             return res;
         }
 
-        /* Verify single-use, scope-bound token in constant time */
+        /* Verify single-use, scope-bound token in constant time with persistent state */
         const char *needed_scope = ctx->required_scope ? ctx->required_scope : "default";
+        const char *store_path = qala_get_token_store_path();
         bool found_valid = false;
         for (size_t i = 0; i < slot_count; ++i) {
             bool scope_matches = constant_time_streq(slots[i].scope, needed_scope);
 
-            if (!slots[i].consumed &&
+            if (scope_matches &&
                 now_utc <= slots[i].expires_utc &&
-                constant_time_streq(slots[i].token, ctx->supplied_code) &&
-                scope_matches) {
-                slots[i].consumed = true; /* Strictly single-use */
+                constant_time_streq(slots[i].token, ctx->supplied_code)) {
+
+                /* 1. Check in-memory single-use consumption */
+                if (slots[i].consumed) {
+                    break;
+                }
+
+                /* 2. Check persistent on-disk ledger (prevents replay across restarts) */
+                if (qala_token_store_is_consumed(store_path, ctx->supplied_code)) {
+                    slots[i].consumed = true;
+                    break;
+                }
+
+                /* 3. Mark single-use consumption in memory */
+                slots[i].consumed = true;
+
+                /* 4. Commit to immutable on-disk ledger */
+                int rec_rc = qala_token_store_record_consumed(
+                    store_path,
+                    slots[i].token,
+                    slots[i].scope,
+                    ctx->tool_name,
+                    ctx->amount_aed,
+                    now_utc
+                );
+
+                if (rec_rc != 0) {
+                    /* Fail-closed if immutable persistence failed */
+                    res.verdict = VERDICT_ERROR;
+                    snprintf(res.code, sizeof(res.code), "%s", "token_persistence_failed");
+                    snprintf(res.reason, sizeof(res.reason), "%s",
+                             "Failed to persist consumed approval token to disk ledger (fail-closed).");
+                    write_desc_audit_log(audit_log_path, now_utc, ctx, &res);
+                    return res;
+                }
+
                 found_valid = true;
                 break;
             }
@@ -462,6 +840,95 @@ int main(void) {
         "tools/call", "{}", 1
     );
     assert(crlf_res == -3);
+
+    /* Test 9: DESC ISR v3.1 Strict Workspace Containment - Paths outside /workspace rejected */
+    qala_tool_call_ctx_t outside_ctx = {
+        .tool_name = "fs_read",
+        .target_path = "/opt/customs/manifest.json",
+        .raw_args_json = NULL,
+        .amount_aed = 0.0,
+        .is_mutating = false,
+        .required_scope = NULL,
+        .supplied_code = NULL
+    };
+    qala_policy_result_t r9 = policy_verify_call(&outside_ctx, slots, 1, 1792600000ULL, NULL);
+    assert(r9.verdict == VERDICT_UNSAFE);
+    assert(strcmp(r9.code, "landlock_fs_denied") == 0);
+
+    /* Test 10: Path traversal sequences rejected */
+    outside_ctx.target_path = "/workspace/../etc/shadow";
+    qala_policy_result_t r10a = policy_verify_call(&outside_ctx, slots, 1, 1792600000ULL, NULL);
+    assert(r10a.verdict == VERDICT_UNSAFE);
+
+    outside_ctx.target_path = "/workspace/%2e%2e/etc/passwd";
+    qala_policy_result_t r10b = policy_verify_call(&outside_ctx, slots, 1, 1792600000ULL, NULL);
+    assert(r10b.verdict == VERDICT_UNSAFE);
+
+    /* Test 11: Secret files and private keys inside workspace rejected */
+    outside_ctx.target_path = "/workspace/.env";
+    qala_policy_result_t r11a = policy_verify_call(&outside_ctx, slots, 1, 1792600000ULL, NULL);
+    assert(r11a.verdict == VERDICT_UNSAFE);
+
+    outside_ctx.target_path = "/workspace/certs/private_key.pem";
+    qala_policy_result_t r11b = policy_verify_call(&outside_ctx, slots, 1, 1792600000ULL, NULL);
+    assert(r11b.verdict == VERDICT_UNSAFE);
+
+    outside_ctx.target_path = "/workspace/.ssh/id_rsa";
+    qala_policy_result_t r11c = policy_verify_call(&outside_ctx, slots, 1, 1792600000ULL, NULL);
+    assert(r11c.verdict == VERDICT_UNSAFE);
+
+    /* Test 12: Legitimate nested workspace paths allowed */
+    outside_ctx.target_path = "/workspace/settlements/batch_2026.json";
+    qala_policy_result_t r12 = policy_verify_call(&outside_ctx, slots, 1, 1792600000ULL, NULL);
+    assert(r12.verdict == VERDICT_SAFE);
+
+    /* Test 13: Persistent on-disk token store survives simulated process restart */
+    const char *test_token_store = "build/test_tokens.jsonl";
+    unlink(test_token_store);
+    qala_set_token_store_path(test_token_store);
+
+    qala_approval_slot_t p_slots[1] = {{
+        .token = "TOKEN-PERSIST-TEST-001",
+        .scope = "finops_remediate",
+        .expires_utc = 1792603600ULL,
+        .consumed = false
+    }};
+
+    qala_tool_call_ctx_t persist_ctx = {
+        .tool_name = "erp_customs_settlement",
+        .target_path = "/workspace/settlements.json",
+        .raw_args_json = NULL,
+        .amount_aed = 100000.00,
+        .is_mutating = true,
+        .required_scope = "finops_remediate",
+        .supplied_code = "TOKEN-PERSIST-TEST-001"
+    };
+
+    /* First execution: valid code consumed and committed to persistent disk ledger */
+    qala_policy_result_t r13a = policy_verify_call(&persist_ctx, p_slots, 1, 1792600000ULL, NULL);
+    assert(r13a.verdict == VERDICT_SAFE);
+    assert(p_slots[0].consumed == true);
+    assert(qala_token_store_is_consumed(test_token_store, "TOKEN-PERSIST-TEST-001") == true);
+
+    /* Second execution (same process): blocked in memory */
+    qala_policy_result_t r13b = policy_verify_call(&persist_ctx, p_slots, 1, 1792600000ULL, NULL);
+    assert(r13b.verdict == VERDICT_UNSAFE);
+
+    /* Third execution (simulated process restart):
+     * Brand new slot array initialized with consumed=false, but persistent file retains consumed state.
+     */
+    qala_approval_slot_t reboot_slots[1] = {{
+        .token = "TOKEN-PERSIST-TEST-001",
+        .scope = "finops_remediate",
+        .expires_utc = 1792603600ULL,
+        .consumed = false  /* Simulates config reloading after reboot */
+    }};
+    qala_policy_result_t r13c = policy_verify_call(&persist_ctx, reboot_slots, 1, 1792600000ULL, NULL);
+    assert(r13c.verdict == VERDICT_UNSAFE);
+    assert(strcmp(r13c.code, "invalid_or_expired_approval") == 0);
+
+    unlink(test_token_store);
+    qala_set_token_store_path("qala-tokens.jsonl");
 
     printf("[PASS] All Qala C99 Hardened Policy Gate, Grounding Shield & Stateless MCP tests passed!\n");
     return 0;
