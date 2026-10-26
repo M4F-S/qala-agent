@@ -16,6 +16,7 @@ Every technical differentiator claimed by Qala is backed by a reproducible machi
 | **Single-Use Token Ledger** | DESC ISR v3.1 Domain 7 (Access Control) | Single-use scope-bound approval codes; persistent disk ledger blocks replay across reboots | `./build/test_qala` |
 | **Workspace Sandbox** | DESC ISR v3.1 Domain 14 (Containment) | Strict canonical prefix matching via `realpath()`; blocks traversal (`..`, `%2e%2e`) and secrets | `./build/test_qala` |
 | **Stateless MCP Transport** | MCP Streamable HTTP Spec (2026-07-28) | RFC-compliant JSON-RPC 2.0 client via `libcurl` and `cJSON`; maps HTTP 401/403 to MCP error codes | `./build/test_mcp_interop` |
+| **Case Memory (Decision History)** | SQLite FTS5 (BM25 Ranking) | Full-text indexed audit ledger answering past vendor/amount/path verdicts citing `timestamp_utc` | `./build/qala_agent --history "shadow"` |
 | **Factual Grounding Shield** | UAE Statutory & Regulatory Corpora | Cross-checks numerical penalties and tariffs against statutory texts to intercept hallucinations | `./build/test_grounding` |
 | **Prompt Injection Defense** | Gomaa Defense Architecture (Optional) | Neutralizes control tokens (`<\|im_start\|>`, `[INST]`) and catches prompt override directives | `python3 tests/test_qala_injection_defense.py` |
 
@@ -31,6 +32,7 @@ Qala builds upon proven foundations while introducing specialized sovereign trad
   - **Stateless MCP 2026-07-28 Driver:** C99 `libcurl` + `cJSON` transport supporting Server-Sent Events (SSE) and L7 header routing (`adapters/mcp_curl_client.c`).
   - **DP World & Dubai Customs Tool Schemas:** Standard JSON-RPC 2.0 tools for container clearance (`customs/clear_shipment`), tariff calculations (`customs/calculate_duty`), and UAE FTA VAT reconciliation (`vat/reconcile_invoice`).
   - **Grounding Shield Verifier:** In-memory deterministic claim-versus-statutory-corpus cross-examiner (`adapters/grounding_shield.c`).
+  - **Case Memory Engine (SQLite FTS5):** Full-text search and BM25 ranked indexing over immutable audit ledgers (`src/qala_case_memory.c`). Enables querying historical approval/rejection decisions (`qala history <query>`) with timestamp citations and deduplicated ingestion.
 
 - **Derived & Reused Components:**
   - **Belya Engine:** Primary C99 deterministic execution and policy compilation core architecture (© Mohamed Fathy, Apache-2.0).
@@ -57,6 +59,7 @@ Qala includes optional integration with the Gomaa Agent Memory OS for prompt inj
 - ISO C99 compiler (`gcc` or `clang`)
 - GNU Make
 - `libcurl` development headers (`libcurl4-openssl-dev` on Debian/Ubuntu)
+- SQLite 3 development headers (`libsqlite3-dev` on Debian/Ubuntu)
 - Python 3 (for MCP mock server and optional injection test suite)
 
 #### Quick Start Commands

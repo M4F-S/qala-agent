@@ -115,10 +115,10 @@ and a README "Built on" section: what is new (policy gate rules, sandbox, MCP tr
 
 Qala's "memory" is **decision history**, not personal memory. The audit ledger already records every tool call and verdict; make it useful.
 
-- [ ] Index the audit ledger with SQLite FTS5 (`libsqlite3` is already installed by your CI; add it to `LDFLAGS`).
-- [ ] Answer: "has this vendor/amount/path been approved before, by whom, and did it go wrong?" — returned as a ranked list of prior cases.
-- [ ] Surface it in `qala_agent.c` as a `history <query>` command; every answer cites the audit line's `timestamp_utc`.
-- [ ] Test: three cases, one approval, one rejection, one replay attempt → query returns the right two.
+- [x] Index the audit ledger with SQLite FTS5 (`libsqlite3` is already installed by your CI; add it to `LDFLAGS`).
+- [x] Answer: "has this vendor/amount/path been approved before, by whom, and did it go wrong?" — returned as a ranked list of prior cases.
+- [x] Surface it in `qala_agent.c` as a `history <query>` command; every answer cites the audit line's `timestamp_utc`.
+- [x] Test: three cases, one approval, one rejection, one replay attempt → query returns the right two.
 
 **Do not** add embeddings or gomaa to the runtime path in this round.
 

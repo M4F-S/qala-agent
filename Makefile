@@ -2,8 +2,8 @@
 # Track: Best Business AI Agent | Dubai AI Agents Championship 2026-2027
 
 CC ?= cc
-CFLAGS ?= -std=c99 -Wall -Wextra -Werror -O2 -Iadapters
-LDFLAGS ?= -lm -lcurl
+CFLAGS ?= -std=c99 -Wall -Wextra -Werror -O2 -Iadapters -Isrc
+LDFLAGS ?= -lm -lcurl -lsqlite3
 
 UNAME_S := $(shell uname -s)
 ifeq ($(UNAME_S),Darwin)
@@ -18,15 +18,15 @@ BUILD_DIR = build
 BIN = $(BUILD_DIR)/qala_agent
 LIB = $(BUILD_DIR)/libqala.$(LIB_EXT)
 
-all: $(BUILD_DIR) $(BIN) $(LIB) $(BUILD_DIR)/test_qala $(BUILD_DIR)/test_grounding $(BUILD_DIR)/test_mcp_client $(BUILD_DIR)/test_mcp_interop
+all: $(BUILD_DIR) $(BIN) $(LIB) $(BUILD_DIR)/test_qala $(BUILD_DIR)/test_grounding $(BUILD_DIR)/test_mcp_client $(BUILD_DIR)/test_mcp_interop $(BUILD_DIR)/test_case_memory
 
 $(BUILD_DIR):
 	mkdir -p $(BUILD_DIR)
 
-$(BIN): src/qala_agent.c adapters/qala_mcp_policy_adapter.c adapters/grounding_shield.c adapters/mcp_curl_client.c adapters/cJSON.c | $(BUILD_DIR)
+$(BIN): src/qala_agent.c src/qala_case_memory.c adapters/qala_mcp_policy_adapter.c adapters/grounding_shield.c adapters/mcp_curl_client.c adapters/cJSON.c | $(BUILD_DIR)
 	$(CC) $(CFLAGS) $^ $(LDFLAGS) -o $@
 
-$(LIB): adapters/qala_mcp_policy_adapter.c adapters/grounding_shield.c adapters/mcp_curl_client.c adapters/cJSON.c | $(BUILD_DIR)
+$(LIB): adapters/qala_mcp_policy_adapter.c adapters/grounding_shield.c adapters/mcp_curl_client.c adapters/cJSON.c src/qala_case_memory.c | $(BUILD_DIR)
 	$(CC) $(CFLAGS) -fPIC $(SHARED_FLAGS) $^ $(LDFLAGS) -o $(LIB)
 
 $(BUILD_DIR)/test_qala: adapters/qala_mcp_policy_adapter.c adapters/grounding_shield.c | $(BUILD_DIR)
@@ -41,6 +41,9 @@ $(BUILD_DIR)/test_mcp_client: adapters/mcp_curl_client.c adapters/cJSON.c | $(BU
 $(BUILD_DIR)/test_mcp_interop: tests/test_mcp_interop.c adapters/mcp_curl_client.c adapters/cJSON.c | $(BUILD_DIR)
 	$(CC) $(CFLAGS) $^ $(LDFLAGS) -o $@
 
+$(BUILD_DIR)/test_case_memory: tests/test_case_memory.c src/qala_case_memory.c adapters/cJSON.c | $(BUILD_DIR)
+	$(CC) $(CFLAGS) $^ $(LDFLAGS) -o $@
+
 test: all
 	@echo "=================================================================="
 	@echo " RUNNING QALA NATIVE CLI ACCEPTANCE BATTERY"
@@ -52,6 +55,10 @@ test: all
 	./$(BUILD_DIR)/test_qala
 	./$(BUILD_DIR)/test_grounding
 	./$(BUILD_DIR)/test_mcp_client
+	@echo "=================================================================="
+	@echo " RUNNING QALA SQLITE FTS5 CASE MEMORY TEST SUITE"
+	@echo "=================================================================="
+	./$(BUILD_DIR)/test_case_memory
 	@echo "=================================================================="
 	@echo " RUNNING STATELESS MCP INTEROP TEST SUITE"
 	@echo "=================================================================="

@@ -23,6 +23,7 @@
 #include "qala_adapters.h"
 #include "grounding_shield.h"
 #include "mcp_curl_client.h"
+#include "qala_case_memory.h"
 
 #define QALA_VERSION "0.1.0-c99-sovereign"
 #define DEFAULT_AUDIT_LOG "qala-audit.jsonl"
@@ -196,6 +197,7 @@ static void print_hud(const char *workspace_root, const char *token_path, const 
     printf("│ Tau-3 FinOps Threshold:   AED 50,000.00 (Single-Use Approval Code Required)│\n");
     printf("│ Approval Token Ledger:    %-48.48s │\n", token_path ? token_path : DEFAULT_TOKEN_LOG);
     printf("│ Tamper-Evident Audit:     %-48.48s │\n", audit_path ? audit_path : DEFAULT_AUDIT_LOG);
+    printf("│ Case Memory Engine:       SQLite FTS5 BM25 Decision Retrieval              │\n");
     printf("│ MCP Transport Standard:   Model Context Protocol JSON-RPC 2.0 (libcurl)     │\n");
     printf("└────────────────────────────────────────────────────────────────────────────┘\n\n");
 }
@@ -225,12 +227,12 @@ static int run_deterministic_tests(void) {
 
     double cold_ms = (double)(cold_end.tv_sec - cold_start.tv_sec) * 1000.0 +
                      (double)(cold_end.tv_usec - cold_start.tv_usec) / 1000.0;
-    printf("[MILESTONE 1/7] Cold Start Init: %.3f ms (Criteria: < 15.000 ms) -> %s\n",
+    printf("[MILESTONE 1/8] Cold Start Init: %.3f ms (Criteria: < 15.000 ms) -> %s\n",
            cold_ms, (cold_ms < 15.0) ? "PASS" : "FAIL");
     if (cold_ms >= 15.0) return 1;
 
     /* Milestone 2: DESC ISR v3.1 Path Sandbox */
-    printf("[MILESTONE 2/7] DESC ISR v3.1 Path Sandbox Verification...\n");
+    printf("[MILESTONE 2/8] DESC ISR v3.1 Path Sandbox Verification...\n");
     uint64_t now_utc = (uint64_t)time(NULL);
 
     qala_tool_call_ctx_t ctx_escape = {
@@ -263,7 +265,7 @@ static int run_deterministic_tests(void) {
     printf("  [PASS] Path escape (/../../etc/shadow) and secret (.env) blocked deterministically.\n");
 
     /* Milestone 3: Tau-3 FinOps Policy Gate */
-    printf("[MILESTONE 3/7] Tau-3 FinOps Policy Threshold (AED 50,000.00)...\n");
+    printf("[MILESTONE 3/8] Tau-3 FinOps Policy Threshold (AED 50,000.00)...\n");
 
     /* Small read query: AED 4,500, non-mutating -> VERDICT_SAFE */
     qala_tool_call_ctx_t ctx_small = {
@@ -297,7 +299,7 @@ static int run_deterministic_tests(void) {
     printf("  [PASS] Sub-50k query (AED 4,500) safe; High tx (AED 120,000) gated under VERDICT_REVIEW.\n");
 
     /* Milestone 4: Single-use cryptographic approval code verification */
-    printf("[MILESTONE 4/7] Single-Use Cryptographic Approval Code Consumption...\n");
+    printf("[MILESTONE 4/8] Single-Use Cryptographic Approval Code Consumption...\n");
     qala_approval_slot_t slots[2];
     memset(slots, 0, sizeof(slots));
 
@@ -322,7 +324,7 @@ static int run_deterministic_tests(void) {
     printf("  [PASS] Single-use token QALA-AUTH-DPW-9921 verified and slot marked consumed.\n");
 
     /* Milestone 5: Replay attack prevention */
-    printf("[MILESTONE 5/7] Replay Attack Prevention (Re-use of consumed token)...\n");
+    printf("[MILESTONE 5/8] Replay Attack Prevention (Re-use of consumed token)...\n");
     qala_policy_result_t res_replay = policy_verify_call(&ctx_high_approved, slots, 1, now_utc, "build/qala_test_audit.jsonl");
     if (res_replay.verdict != VERDICT_UNSAFE) {
         fprintf(stderr, "[-] Replay attack succeeded! Expected VERDICT_UNSAFE, got: %d\n", res_replay.verdict);
@@ -331,7 +333,7 @@ static int run_deterministic_tests(void) {
     printf("  [PASS] Token replay attempt correctly blocked under VERDICT_UNSAFE.\n");
 
     /* Milestone 6: DP World Customs & UAE 5% VAT Settlement Verification */
-    printf("[MILESTONE 6/7] DP World Customs Tariff (5%%) & UAE Statutory VAT (5%%) Settlement...\n");
+    printf("[MILESTONE 6/8] DP World Customs Tariff (5%%) & UAE Statutory VAT (5%%) Settlement...\n");
     double cif_value = 100000.00;
     double customs_duty = cif_value * 0.05;
     double taxable_base = cif_value + customs_duty;
@@ -346,7 +348,7 @@ static int run_deterministic_tests(void) {
            cif_value, customs_duty, uae_vat, total_settlement);
 
     /* Milestone 7: Tamper-Evident SHA-256 Audit Record Verification */
-    printf("[MILESTONE 7/7] Tamper-Evident SHA-256 Audit Log Verification...\n");
+    printf("[MILESTONE 7/8] Tamper-Evident SHA-256 Audit Log Verification...\n");
     FILE *audit_fp = fopen("build/qala_test_audit.jsonl", "r");
     if (!audit_fp) {
         fprintf(stderr, "[-] Audit log was not created on disk!\n");
@@ -371,6 +373,41 @@ static int run_deterministic_tests(void) {
         return 11;
     }
     printf("  [PASS] Audit log verified (%d lines written, SHA-256 integrity intact).\n", line_count);
+
+    /* Milestone 8: SQLite FTS5 Case Memory Decision Retrieval */
+    printf("[MILESTONE 8/8] SQLite FTS5 Case Memory Decision Retrieval...\n");
+    qala_case_memory_t *mem = qala_case_memory_open(":memory:");
+    if (!mem) {
+        fprintf(stderr, "[-] Failed to open in-memory case database!\n");
+        return 12;
+    }
+    int indexed = qala_case_memory_index_file(mem, "build/qala_test_audit.jsonl");
+    if (indexed < 3) {
+        fprintf(stderr, "[-] Failed to index audit log into case memory (got %d)\n", indexed);
+        qala_case_memory_close(mem);
+        return 13;
+    }
+    qala_case_record_t results[10];
+    int q_hits = qala_case_memory_query(mem, "shadow", results, 10);
+    if (q_hits != 1) {
+        fprintf(stderr, "[-] Query 'shadow' expected 1 match, got %d\n", q_hits);
+        qala_case_memory_close(mem);
+        return 14;
+    }
+    q_hits = qala_case_memory_query(mem, "invalid_or_expired_approval", results, 10);
+    if (q_hits != 1) {
+        fprintf(stderr, "[-] Query 'invalid_or_expired_approval' expected 1 match, got %d\n", q_hits);
+        qala_case_memory_close(mem);
+        return 15;
+    }
+    q_hits = qala_case_memory_query(mem, "erp_customs_settlement", results, 10);
+    if (q_hits != 3) {
+        fprintf(stderr, "[-] Query 'erp_customs_settlement' expected 3 matches, got %d\n", q_hits);
+        qala_case_memory_close(mem);
+        return 16;
+    }
+    qala_case_memory_close(mem);
+    printf("  [PASS] Case memory indexed %d audit records; FTS5 BM25 queries answered.\n", indexed);
 
     gettimeofday(&tv_end, NULL);
     double total_ms = (double)(tv_end.tv_sec - tv_start.tv_sec) * 1000.0 +
@@ -445,6 +482,8 @@ static void run_demo(void) {
 /* 5. Interactive REPL Mode                                                   */
 /* ========================================================================= */
 
+static int run_history_cli(const char *query);
+
 static void run_interactive(void) {
     print_banner();
     print_hud(DEFAULT_WORKSPACE, DEFAULT_TOKEN_LOG, DEFAULT_AUDIT_LOG);
@@ -472,8 +511,17 @@ static void run_interactive(void) {
             printf("  calc_duty <cif_aed>        Calculate 5%% customs duty and 5%% UAE VAT\n");
             printf("  check_path <path>          Check path against DESC ISR v3.1 sandbox\n");
             printf("  verify_tx <aed> [token]    Evaluate Tau-3 FinOps policy gate on an amount\n");
+            printf("  history <query>            Search prior decisions citing audit timestamp_utc\n");
             printf("  status                     Display governance HUD status\n");
             printf("  exit                       Quit the interactive REPL\n");
+        } else if (strncmp(line, "history ", 8) == 0) {
+            const char *q = line + 8;
+            while (*q == ' ') q++;
+            if (*q == '\0') {
+                printf("Usage: history <query>\n");
+            } else {
+                run_history_cli(q);
+            }
         } else if (strncmp(line, "calc_duty ", 10) == 0) {
             double cif = atof(line + 10);
             if (cif <= 0.0) {
@@ -611,6 +659,45 @@ static int run_verify_tx_cli(double aed, const char *token_arg) {
     }
 }
 
+static int run_history_cli(const char *query) {
+    if (!query || strlen(query) == 0) {
+        fprintf(stderr, "Error: Query string required for history search.\n");
+        return 1;
+    }
+    const char *audit_path = getenv("QALA_AUDIT_LOG_PATH");
+    if (!audit_path || audit_path[0] == '\0') {
+        audit_path = DEFAULT_AUDIT_LOG;
+    }
+
+    qala_case_memory_t *mem = qala_case_memory_open(":memory:");
+    if (!mem) {
+        fprintf(stderr, "Error: Failed to initialize SQLite FTS5 case memory.\n");
+        return 1;
+    }
+
+    /* Index primary audit log */
+    int indexed = qala_case_memory_index_file(mem, audit_path);
+
+    /* Also index test audit log if present to capture recent test executions */
+    if (access("build/qala_test_audit.jsonl", F_OK) == 0 && strcmp(audit_path, "build/qala_test_audit.jsonl") != 0) {
+        qala_case_memory_index_file(mem, "build/qala_test_audit.jsonl");
+    }
+
+    if (indexed < 0 && access("build/qala_test_audit.jsonl", F_OK) != 0) {
+        fprintf(stderr, "Notice: Audit log '%s' not accessible or empty (0 cases loaded).\n", audit_path);
+    }
+
+    qala_case_record_t results[32];
+    int count = qala_case_memory_query(mem, query, results, 32);
+
+    char out[8192];
+    qala_case_memory_format_results(query, results, count, out, sizeof(out));
+    printf("%s\n", out);
+
+    qala_case_memory_close(mem);
+    return 0;
+}
+
 /* ========================================================================= */
 /* 6. Main Entry Point                                                       */
 /* ========================================================================= */
@@ -628,6 +715,12 @@ int main(int argc, char **argv) {
             }
             double aed = atof(argv[2]);
             return run_verify_tx_cli(aed, argv[3]);
+        } else if (strcmp(argv[1], "--history") == 0 || strcmp(argv[1], "history") == 0) {
+            if (argc < 3) {
+                fprintf(stderr, "Usage: %s --history <query>\n", argv[0]);
+                return 1;
+            }
+            return run_history_cli(argv[2]);
         } else if (strcmp(argv[1], "--demo") == 0) {
             run_demo();
             return 0;
@@ -640,6 +733,7 @@ int main(int argc, char **argv) {
             printf("Options:\n");
             printf("  --test                                Run deterministic acceptance suite (< 15 ms)\n");
             printf("  --verify-tx <amount> <approval_code>  Evaluate single transaction against Tau-3 FinOps gate\n");
+            printf("  --history <query>                     Query SQLite FTS5 decision history citing timestamp_utc\n");
             printf("  --demo                                Run interactive enterprise trade demonstration\n");
             printf("  --interactive, -i                     Start interactive policy REPL\n");
             printf("  --help, -h                            Display this help menu\n");
