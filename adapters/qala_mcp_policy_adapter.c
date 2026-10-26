@@ -351,9 +351,15 @@ static bool resolve_canonical_path(const char *input_path, char *out_canonical, 
     char full[PATH_MAX];
 
     if (input_path[0] == '/') {
-        snprintf(full, sizeof(full), "%s", input_path);
+        size_t ip_len = strlen(input_path);
+        if (ip_len >= sizeof(full)) return false;
+        memcpy(full, input_path, ip_len + 1);
     } else {
-        snprintf(full, sizeof(full), "%s/%s", ws_root, input_path);
+        size_t a = strlen(ws_root), b = strlen(input_path);
+        if (a + 1 + b >= sizeof(full)) return false;   /* fail-closed: caller denies */
+        memcpy(full, ws_root, a);
+        full[a] = '/';
+        memcpy(full + a + 1, input_path, b + 1);
     }
 
     /* 1. Attempt kernel realpath directly (resolves symlinks) */
@@ -376,9 +382,16 @@ static bool resolve_canonical_path(const char *input_path, char *out_canonical, 
         if (bname && strcmp(bname, ".") != 0 && strcmp(bname, "..") != 0) {
             char combined[PATH_MAX];
             if (strcmp(resolved, "/") == 0) {
-                snprintf(combined, sizeof(combined), "/%s", bname);
+                size_t rb = strlen(bname);
+                if (1 + rb >= sizeof(combined)) return false;
+                combined[0] = '/';
+                memcpy(combined + 1, bname, rb + 1);
             } else {
-                snprintf(combined, sizeof(combined), "%s/%s", resolved, bname);
+                size_t ra = strlen(resolved), rb = strlen(bname);
+                if (ra + 1 + rb >= sizeof(combined)) return false;
+                memcpy(combined, resolved, ra);
+                combined[ra] = '/';
+                memcpy(combined + ra + 1, bname, rb + 1);
             }
             return normalize_path_lexical(combined, out_canonical, cap);
         }
@@ -536,7 +549,7 @@ qala_policy_result_t policy_verify_call(
     /* 1. DESC ISR v3.1 Filesystem Sandbox Barrier */
     if (is_restricted_path_hardened(ctx->target_path, ctx->raw_args_json)) {
         res.verdict = VERDICT_UNSAFE;
-        snprintf(res.code, sizeof(res.code), "%s", "landlock_fs_denied");
+        snprintf(res.code, sizeof(res.code), "%s", "workspace_containment_denied");
         snprintf(res.reason, sizeof(res.reason),
                  "Access to restricted path '%s' denied by DESC ISR v3.1 policy gate.",
                  ctx->target_path ? ctx->target_path : "unspecified");
@@ -745,6 +758,10 @@ int mcp_stateless_build_request(
 #include <assert.h>
 
 int main(void) {
+    const char *init_test_tokens = "build/qala_standalone_tokens.jsonl";
+    unlink(init_test_tokens);
+    qala_set_token_store_path(init_test_tokens);
+
     qala_approval_slot_t slots[1] = {{
         .token = "DUBAI-APPROVE-9941-X",
         .scope = "finops_remediate",
@@ -764,7 +781,7 @@ int main(void) {
     };
     qala_policy_result_t r1 = policy_verify_call(&attack_ctx, slots, 1, 1792600000ULL, NULL);
     assert(r1.verdict == VERDICT_UNSAFE);
-    assert(strcmp(r1.code, "landlock_fs_denied") == 0);
+    assert(strcmp(r1.code, "workspace_containment_denied") == 0);
 
     /* Test 2: High value mutation without token -> REVIEW */
     qala_tool_call_ctx_t unapproved_ctx = {
@@ -853,7 +870,7 @@ int main(void) {
     };
     qala_policy_result_t r9 = policy_verify_call(&outside_ctx, slots, 1, 1792600000ULL, NULL);
     assert(r9.verdict == VERDICT_UNSAFE);
-    assert(strcmp(r9.code, "landlock_fs_denied") == 0);
+    assert(strcmp(r9.code, "workspace_containment_denied") == 0);
 
     /* Test 10: Path traversal sequences rejected */
     outside_ctx.target_path = "/workspace/../etc/shadow";
@@ -928,6 +945,7 @@ int main(void) {
     assert(strcmp(r13c.code, "invalid_or_expired_approval") == 0);
 
     unlink(test_token_store);
+    unlink(init_test_tokens);
     qala_set_token_store_path("qala-tokens.jsonl");
 
     printf("[PASS] All Qala C99 Hardened Policy Gate, Grounding Shield & Stateless MCP tests passed!\n");

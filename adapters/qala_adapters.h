@@ -18,7 +18,7 @@ typedef enum {
     VERDICT_SAFE            = 0, /* Safe to execute immediately */
     VERDICT_CAUTION         = 1, /* Low-risk warning logged; execution permitted */
     VERDICT_REVIEW          = 2, /* Gated mutation: requires single-use approval code */
-    VERDICT_UNSAFE          = 3, /* Hard block: Landlock / DESC ISR v3 violation */
+    VERDICT_UNSAFE          = 3, /* Hard block: Workspace containment / DESC ISR v3 violation */
     VERDICT_AUTH_BLK        = 4, /* Upstream credential missing or expired */
     VERDICT_HALLUCINATION   = 5, /* Grounding Shield blocked unverified/hallucinated claim */
     VERDICT_ERROR           = 6  /* Malformed tool arguments or transport fault */
@@ -88,6 +88,7 @@ void        qala_set_workspace_root(const char *root);
 const char *qala_get_workspace_root(void);
 
 /* Persistent Dual-Key Single-Use Approval Token Store */
+/* Callers should call qala_set_token_store_path() at startup; otherwise the ledger is written relative to the working directory. */
 void        qala_set_token_store_path(const char *path);
 const char *qala_get_token_store_path(void);
 bool        qala_token_store_is_consumed(const char *store_path, const char *token);

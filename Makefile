@@ -72,6 +72,11 @@ test: all
 
 clean:
 	rm -rf $(BUILD_DIR)
-	rm -f qala-audit.jsonl *.audit.jsonl qala-tokens.jsonl *.tokens.jsonl *.jsonl data/*.jsonl
+	rm -f qala-audit.jsonl *.audit.jsonl
 
-.PHONY: all test clean
+verify: clean all test
+	@echo "=================================================================="
+	@echo " [VERIFIED] All Qala Enterprise Verification Targets Passed!"
+	@echo "=================================================================="
+
+.PHONY: all test clean verify

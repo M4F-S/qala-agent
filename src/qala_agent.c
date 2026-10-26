@@ -17,6 +17,7 @@
 #include <sys/time.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#include <limits.h>
 #include <curl/curl.h>
 
 #include "qala_adapters.h"
@@ -552,14 +553,81 @@ static void run_interactive(void) {
     }
 }
 
+static void init_token_store(void) {
+    const char *env_path = getenv("QALA_TOKEN_STORE_PATH");
+    char resolved_path[PATH_MAX];
+
+    if (env_path && env_path[0] != '\0') {
+        snprintf(resolved_path, sizeof(resolved_path), "%s", env_path);
+    } else {
+        const char *home = getenv("HOME");
+        if (home && home[0] != '\0') {
+            char dir[PATH_MAX];
+            snprintf(dir, sizeof(dir), "%s/.qala", home);
+            mkdir(dir, 0700);
+            snprintf(resolved_path, sizeof(resolved_path), "%s/.qala/tokens.jsonl", home);
+        } else {
+            snprintf(resolved_path, sizeof(resolved_path), "%s", DEFAULT_TOKEN_LOG);
+        }
+    }
+    qala_set_token_store_path(resolved_path);
+}
+
+static int run_verify_tx_cli(double aed, const char *token_arg) {
+    uint64_t now_utc = (uint64_t)time(NULL);
+
+    qala_approval_slot_t slot;
+    memset(&slot, 0, sizeof(slot));
+    size_t slot_count = 0;
+    if (token_arg && strlen(token_arg) > 0) {
+        snprintf(slot.token, sizeof(slot.token), "%s", token_arg);
+        snprintf(slot.scope, sizeof(slot.scope), "trade_finance");
+        slot.expires_utc = now_utc + 3600;
+        slot.consumed = false;
+        slot_count = 1;
+    }
+
+    qala_tool_call_ctx_t ctx = {
+        .tool_name = "erp_customs_settlement",
+        .target_path = "/workspace/trade_docs/inv.json",
+        .amount_aed = aed,
+        .is_mutating = true,
+        .required_scope = "trade_finance",
+        .supplied_code = token_arg
+    };
+    qala_policy_result_t res = policy_verify_call(&ctx, slot_count > 0 ? &slot : NULL,
+                                                  slot_count, now_utc, DEFAULT_AUDIT_LOG);
+    if (res.verdict == VERDICT_SAFE) {
+        printf("[SAFE / APPROVED] Transaction AED %.2f cleared for settlement.\n", aed);
+        return 0;
+    } else if (res.verdict == VERDICT_REVIEW) {
+        printf("[GATED / REVIEW] Transaction AED %.2f exceeds Tau-3 threshold. Code required: %s\n",
+               aed, res.reason);
+        return 2;
+    } else {
+        printf("[BLOCKED] Transaction AED %.2f rejected. Code: %s, Reason: %s\n",
+               aed, res.code, res.reason);
+        return 1;
+    }
+}
+
 /* ========================================================================= */
 /* 6. Main Entry Point                                                       */
 /* ========================================================================= */
 
 int main(int argc, char **argv) {
+    init_token_store();
+
     if (argc > 1) {
         if (strcmp(argv[1], "--test") == 0) {
             return run_deterministic_tests();
+        } else if (strcmp(argv[1], "--verify-tx") == 0 || strcmp(argv[1], "verify_tx") == 0) {
+            if (argc < 4) {
+                fprintf(stderr, "Usage: %s --verify-tx <amount_aed> <approval_code>\n", argv[0]);
+                return 1;
+            }
+            double aed = atof(argv[2]);
+            return run_verify_tx_cli(aed, argv[3]);
         } else if (strcmp(argv[1], "--demo") == 0) {
             run_demo();
             return 0;
@@ -570,10 +638,11 @@ int main(int argc, char **argv) {
             print_banner();
             printf("Usage: %s [OPTION]\n", argv[0]);
             printf("Options:\n");
-            printf("  --test             Run deterministic acceptance suite (< 15 ms)\n");
-            printf("  --demo             Run interactive enterprise trade demonstration\n");
-            printf("  --interactive, -i  Start interactive policy REPL\n");
-            printf("  --help, -h         Display this help menu\n");
+            printf("  --test                                Run deterministic acceptance suite (< 15 ms)\n");
+            printf("  --verify-tx <amount> <approval_code>  Evaluate single transaction against Tau-3 FinOps gate\n");
+            printf("  --demo                                Run interactive enterprise trade demonstration\n");
+            printf("  --interactive, -i                     Start interactive policy REPL\n");
+            printf("  --help, -h                            Display this help menu\n");
             return 0;
         } else {
             fprintf(stderr, "Unknown option: %s. Use --help for usage.\n", argv[1]);

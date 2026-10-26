@@ -1,0 +1,11 @@
+Qala (القلعة) — Sovereign Enterprise Policy & Trade AI Agent
+Copyright 2026 Mohamed Fathy
+
+This product includes software derived from:
+  - Belya (C99 autonomous SE core)   — © Mohamed Fathy — https://github.com/M4F-S/Belya
+  - gomaa (agent memory OS, optional) — © Mohamed Fathy — https://github.com/M4F-S/gomaa
+
+Components:
+  - adapters/qala_mcp_policy_adapter.c
+  - src/qala_agent.c
+  - adapters/qala_injection_shield.py

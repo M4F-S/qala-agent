@@ -13,9 +13,10 @@ ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT_DIR)
 sys.path.insert(0, os.path.join(ROOT_DIR, "adapters"))
 
-from qala_injection_shield import QalaInjectionShield
+from qala_injection_shield import QalaInjectionShield, GOMAA_AVAILABLE
 
 
+@unittest.skipUnless(GOMAA_AVAILABLE, "optional: gomaa Memory OS not installed (set GOMAA_HOME)")
 class TestQalaInjectionDefense(unittest.TestCase):
     def setUp(self):
         self.shield = QalaInjectionShield(lib_dir=os.path.join(ROOT_DIR, "build"))

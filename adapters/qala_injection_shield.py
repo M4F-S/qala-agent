@@ -13,22 +13,19 @@ import ctypes
 import time
 from typing import Dict, Any, List, Optional, Tuple
 
-# Resolve Gomaa Search Paths
-GOMAA_SEARCH_PATHS = [
-    os.path.expanduser("~/.gemini/antigravity/scratch/mnemosyne"),
-    os.path.expanduser("~/mnemosyne"),
-    os.path.expanduser("~/gomaa"),
-]
-for p in GOMAA_SEARCH_PATHS:
-    if os.path.isdir(p) and p not in sys.path:
-        sys.path.insert(0, p)
+# Resolve Gomaa Search Path
+GOMAA_HOME = os.environ.get("GOMAA_HOME", os.path.expanduser("~/gomaa"))
+if os.path.isdir(GOMAA_HOME) and GOMAA_HOME not in sys.path:
+    sys.path.insert(0, GOMAA_HOME)
 
 try:
     from gomaa.security import AdmissionControl
     from gomaa.core import _neutralize_control_tokens
-    GOMAA_SECURITY_AVAILABLE = True
+    GOMAA_AVAILABLE = True
 except ImportError:
-    GOMAA_SECURITY_AVAILABLE = False
+    GOMAA_AVAILABLE = False
+
+GOMAA_SECURITY_AVAILABLE = GOMAA_AVAILABLE
 
 
 # ==============================================================================
