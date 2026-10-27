@@ -1,0 +1,26 @@
+=== SECTION ===
+doc_id: DESC-ISR-V3.1
+doc_title: Dubai Electronic Security Center Information Security Regulation v3.1
+section: Domain 7.1
+section_title: Least Privilege and Dual Authorization
+page: 42
+numerical: 0.00
+text: Dual authorization is mandatory for critical administrative and financial operations. High-risk actions must require a secondary single-use approval token bound to the specific transaction scope.
+
+=== SECTION ===
+doc_id: DESC-ISR-V3.1
+doc_title: Dubai Electronic Security Center Information Security Regulation v3.1
+section: Domain 11.2
+section_title: Operations Security and Immutable Audit Logging
+page: 78
+numerical: 0.00
+text: All security-relevant events, access control decisions, and tool executions must be recorded in an immutable append-only audit log with timestamp_utc and cryptographic integrity.
+
+=== SECTION ===
+doc_id: DESC-ISR-V3.1
+doc_title: Dubai Electronic Security Center Information Security Regulation v3.1
+section: Domain 14.1
+section_title: Containment and Directory Traversal Prevention
+page: 104
+numerical: 0.00
+text: Execution environments must restrict filesystem access strictly to authorized workspace roots. Directory traversal sequences (.. or %2e%2e) and unauthorized access to system credentials or environment files are strictly prohibited and must fail closed.

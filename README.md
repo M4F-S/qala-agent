@@ -17,6 +17,7 @@ Every technical differentiator claimed by Qala is backed by a reproducible machi
 | **Workspace Sandbox** | DESC ISR v3.1 Domain 14 (Containment) | Strict canonical prefix matching via `realpath()`; blocks traversal (`..`, `%2e%2e`) and secrets | `./build/test_qala` |
 | **Stateless MCP Transport** | MCP Streamable HTTP Spec (2026-07-28) | RFC-compliant JSON-RPC 2.0 client via `libcurl` and `cJSON`; maps HTTP 401/403 to MCP error codes | `./build/test_mcp_interop` |
 | **Case Memory (Decision History)** | SQLite FTS5 (BM25 Ranking) | Full-text indexed audit ledger answering past vendor/amount/path verdicts citing `timestamp_utc` | `./build/qala_agent --history "shadow"` |
+| **Policy RAG & Statutory Grounding** | SQLite FTS5 + SHA-256 Manifest | Section-chunked statutory corpus with cryptographic manifest; tool calls carry verified passage hash into audit log | `./build/qala_agent --ask "what is the approval threshold and where is it defined?"` |
 | **Factual Grounding Shield** | UAE Statutory & Regulatory Corpora | Cross-checks numerical penalties and tariffs against statutory texts to intercept hallucinations | `./build/test_grounding` |
 | **Prompt Injection Defense** | Gomaa Defense Architecture (Optional) | Neutralizes control tokens (`<\|im_start\|>`, `[INST]`) and catches prompt override directives | `python3 tests/test_qala_injection_defense.py` |
 
@@ -33,6 +34,7 @@ Qala builds upon proven foundations while introducing specialized sovereign trad
   - **DP World & Dubai Customs Tool Schemas:** Standard JSON-RPC 2.0 tools for container clearance (`customs/clear_shipment`), tariff calculations (`customs/calculate_duty`), and UAE FTA VAT reconciliation (`vat/reconcile_invoice`).
   - **Grounding Shield Verifier:** In-memory deterministic claim-versus-statutory-corpus cross-examiner (`adapters/grounding_shield.c`).
   - **Case Memory Engine (SQLite FTS5):** Full-text search and BM25 ranked indexing over immutable audit ledgers (`src/qala_case_memory.c`). Enables querying historical approval/rejection decisions (`qala history <query>`) with timestamp citations and deduplicated ingestion.
+  - **Policy RAG & Statutory Corpus Engine:** SQLite FTS5 section-chunked indexing over DESC ISR v3.1, Dubai Customs tariff schedule, and Tau-3 FinOps policies with SHA-256 cryptographic manifest verification (`src/qala_policy_rag.c`). Enforces hard-stop fail-closed execution on passage hash mismatch and carries verified policy passage citations into immutable audit logs.
 
 - **Derived & Reused Components:**
   - **Belya Engine:** Primary C99 deterministic execution and policy compilation core architecture (© Mohamed Fathy, Apache-2.0).

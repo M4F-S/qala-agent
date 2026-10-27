@@ -126,11 +126,11 @@ Qala's "memory" is **decision history**, not personal memory. The audit ledger a
 
 # Round 3 — policy RAG (5–8 days, after Round 2)
 
-- [ ] Corpus: DESC ISR v3.1, Dubai Customs tariff schedule, the AED 50,000 policy text — as small, versioned files with a SHA-256 manifest.
-- [ ] Chunk by section, index in FTS5 (BM25). No model, no network.
-- [ ] Upgrade `grounding_shield` (you own it): add `doc_id`, `section`, `page`, `passage_sha256` to `grounding_source_t`; return the citation in `grounding_result_t`.
-- [ ] Gate: a tool call that cites a policy clause must carry the citation into the audit record. A citation whose `passage_sha256` no longer matches the corpus is a hard block.
-- [ ] Demo question a judge can type: "what is the approval threshold and where is it defined?" → retrieved clause + citation + verifier verdict.
+- [x] Corpus: DESC ISR v3.1, Dubai Customs tariff schedule, the AED 50,000 policy text — as small, versioned files with a SHA-256 manifest.
+- [x] Chunk by section, index in FTS5 (BM25). No model, no network.
+- [x] Upgrade `grounding_shield` (you own it): add `doc_id`, `section`, `page`, `passage_sha256` to `grounding_source_t`; return the citation in `grounding_result_t`.
+- [x] Gate: a tool call that cites a policy clause must carry the citation into the audit record. A citation whose `passage_sha256` no longer matches the corpus is a hard block.
+- [x] Demo question a judge can type: "what is the approval threshold and where is it defined?" → retrieved clause + citation + verifier verdict.
 
 **Do not** claim RAG over any model that is not in the repo.
 

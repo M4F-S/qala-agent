@@ -35,14 +35,22 @@ typedef struct {
     const char *source_title;     /* Formal regulation or manual title */
     const char *snippet_text;     /* Authoritative factual text */
     double      source_numerical; /* Verified statutory number in source */
+    const char *doc_id;           /* Formal document ID (e.g. "DESC-ISR-V3.1") */
+    const char *section;          /* Section / clause (e.g. "Domain 14.1") */
+    int         page;             /* Document page number */
+    char        passage_sha256[65]; /* SHA-256 hex digest of snippet passage */
 } grounding_source_t;
 
 /* Verification result envelope */
 typedef struct {
     grounding_verdict_t verdict;
     double              confidence;           /* 0.0 to 1.0 */
-    char                citation[128];        /* Matched source ID */
+    char                citation[128];        /* Matched source ID / citation */
     char                discrepancy_note[256];/* Detailed explanation if hallucination */
+    char                doc_id[64];           /* Matched statutory document ID */
+    char                section[64];          /* Matched statutory section */
+    int                 page;                 /* Page number */
+    char                passage_sha256[65];   /* SHA-256 hex digest of authoritative passage */
 } grounding_result_t;
 
 /* Function Prototypes */

@@ -48,6 +48,7 @@ EXPLICIT_PATHS=(
     "adapters"
     "src"
     "tests"
+    "corpus"
     "docs"
     ".github"
     "Makefile"

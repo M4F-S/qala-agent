@@ -1,0 +1,26 @@
+=== SECTION ===
+doc_id: TAU3-FINOPS-POLICY-2026
+doc_title: Tau-3 FinOps Enterprise Financial Authority Matrix and Transaction Threshold Policy
+section: Policy 3.1
+section_title: Automated Approval Ceiling and Financial Authority Matrix
+page: 15
+numerical: 50000.00
+text: The automated approval ceiling for autonomous agents is AED 50,000.00. Any single transaction or cumulative clearance exceeding AED 50,000.00 is classified as high-value and must be intercepted.
+
+=== SECTION ===
+doc_id: TAU3-FINOPS-POLICY-2026
+doc_title: Tau-3 FinOps Enterprise Financial Authority Matrix and Transaction Threshold Policy
+section: Policy 3.2
+section_title: Human-in-the-Loop Single-Use Cryptographic Approval Tokens
+page: 16
+numerical: 50000.00
+text: Transactions exceeding AED 50,000.00 require a scope-bound single-use approval code issued by an authorized financial controller. Tokens are non-reusable and expire within 3600 seconds of issuance.
+
+=== SECTION ===
+doc_id: TAU3-FINOPS-POLICY-2026
+doc_title: Tau-3 FinOps Enterprise Financial Authority Matrix and Transaction Threshold Policy
+section: Policy 3.3
+section_title: Fail-Closed Financial Interception and Remediation
+page: 17
+numerical: 0.00
+text: In the event of an unverified token, expired token, mismatched scope, or token persistence failure, the agent must fail closed with VERDICT_REVIEW or VERDICT_UNSAFE, rejecting execution.

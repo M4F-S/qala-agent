@@ -24,6 +24,7 @@
 #include "grounding_shield.h"
 #include "mcp_curl_client.h"
 #include "qala_case_memory.h"
+#include "qala_policy_rag.h"
 
 #define QALA_VERSION "0.1.0-c99-sovereign"
 #define DEFAULT_AUDIT_LOG "qala-audit.jsonl"
@@ -198,6 +199,7 @@ static void print_hud(const char *workspace_root, const char *token_path, const 
     printf("│ Approval Token Ledger:    %-48.48s │\n", token_path ? token_path : DEFAULT_TOKEN_LOG);
     printf("│ Tamper-Evident Audit:     %-48.48s │\n", audit_path ? audit_path : DEFAULT_AUDIT_LOG);
     printf("│ Case Memory Engine:       SQLite FTS5 BM25 Decision Retrieval              │\n");
+    printf("│ Policy RAG Engine:        SQLite FTS5 Statutory Corpus & Cryptographic Manifest│\n");
     printf("│ MCP Transport Standard:   Model Context Protocol JSON-RPC 2.0 (libcurl)     │\n");
     printf("└────────────────────────────────────────────────────────────────────────────┘\n\n");
 }
@@ -227,12 +229,12 @@ static int run_deterministic_tests(void) {
 
     double cold_ms = (double)(cold_end.tv_sec - cold_start.tv_sec) * 1000.0 +
                      (double)(cold_end.tv_usec - cold_start.tv_usec) / 1000.0;
-    printf("[MILESTONE 1/8] Cold Start Init: %.3f ms (Criteria: < 15.000 ms) -> %s\n",
+    printf("[MILESTONE 1/9] Cold Start Init: %.3f ms (Criteria: < 15.000 ms) -> %s\n",
            cold_ms, (cold_ms < 15.0) ? "PASS" : "FAIL");
     if (cold_ms >= 15.0) return 1;
 
     /* Milestone 2: DESC ISR v3.1 Path Sandbox */
-    printf("[MILESTONE 2/8] DESC ISR v3.1 Path Sandbox Verification...\n");
+    printf("[MILESTONE 2/9] DESC ISR v3.1 Path Sandbox Verification...\n");
     uint64_t now_utc = (uint64_t)time(NULL);
 
     qala_tool_call_ctx_t ctx_escape = {
@@ -265,7 +267,7 @@ static int run_deterministic_tests(void) {
     printf("  [PASS] Path escape (/../../etc/shadow) and secret (.env) blocked deterministically.\n");
 
     /* Milestone 3: Tau-3 FinOps Policy Gate */
-    printf("[MILESTONE 3/8] Tau-3 FinOps Policy Threshold (AED 50,000.00)...\n");
+    printf("[MILESTONE 3/9] Tau-3 FinOps Policy Threshold (AED 50,000.00)...\n");
 
     /* Small read query: AED 4,500, non-mutating -> VERDICT_SAFE */
     qala_tool_call_ctx_t ctx_small = {
@@ -299,7 +301,7 @@ static int run_deterministic_tests(void) {
     printf("  [PASS] Sub-50k query (AED 4,500) safe; High tx (AED 120,000) gated under VERDICT_REVIEW.\n");
 
     /* Milestone 4: Single-use cryptographic approval code verification */
-    printf("[MILESTONE 4/8] Single-Use Cryptographic Approval Code Consumption...\n");
+    printf("[MILESTONE 4/9] Single-Use Cryptographic Approval Code Consumption...\n");
     qala_approval_slot_t slots[2];
     memset(slots, 0, sizeof(slots));
 
@@ -324,7 +326,7 @@ static int run_deterministic_tests(void) {
     printf("  [PASS] Single-use token QALA-AUTH-DPW-9921 verified and slot marked consumed.\n");
 
     /* Milestone 5: Replay attack prevention */
-    printf("[MILESTONE 5/8] Replay Attack Prevention (Re-use of consumed token)...\n");
+    printf("[MILESTONE 5/9] Replay Attack Prevention (Re-use of consumed token)...\n");
     qala_policy_result_t res_replay = policy_verify_call(&ctx_high_approved, slots, 1, now_utc, "build/qala_test_audit.jsonl");
     if (res_replay.verdict != VERDICT_UNSAFE) {
         fprintf(stderr, "[-] Replay attack succeeded! Expected VERDICT_UNSAFE, got: %d\n", res_replay.verdict);
@@ -333,7 +335,7 @@ static int run_deterministic_tests(void) {
     printf("  [PASS] Token replay attempt correctly blocked under VERDICT_UNSAFE.\n");
 
     /* Milestone 6: DP World Customs & UAE 5% VAT Settlement Verification */
-    printf("[MILESTONE 6/8] DP World Customs Tariff (5%%) & UAE Statutory VAT (5%%) Settlement...\n");
+    printf("[MILESTONE 6/9] DP World Customs Tariff (5%%) & UAE Statutory VAT (5%%) Settlement...\n");
     double cif_value = 100000.00;
     double customs_duty = cif_value * 0.05;
     double taxable_base = cif_value + customs_duty;
@@ -348,7 +350,7 @@ static int run_deterministic_tests(void) {
            cif_value, customs_duty, uae_vat, total_settlement);
 
     /* Milestone 7: Tamper-Evident SHA-256 Audit Record Verification */
-    printf("[MILESTONE 7/8] Tamper-Evident SHA-256 Audit Log Verification...\n");
+    printf("[MILESTONE 7/9] Tamper-Evident SHA-256 Audit Log Verification...\n");
     FILE *audit_fp = fopen("build/qala_test_audit.jsonl", "r");
     if (!audit_fp) {
         fprintf(stderr, "[-] Audit log was not created on disk!\n");
@@ -375,7 +377,7 @@ static int run_deterministic_tests(void) {
     printf("  [PASS] Audit log verified (%d lines written, SHA-256 integrity intact).\n", line_count);
 
     /* Milestone 8: SQLite FTS5 Case Memory Decision Retrieval */
-    printf("[MILESTONE 8/8] SQLite FTS5 Case Memory Decision Retrieval...\n");
+    printf("[MILESTONE 8/9] SQLite FTS5 Case Memory Decision Retrieval...\n");
     qala_case_memory_t *mem = qala_case_memory_open(":memory:");
     if (!mem) {
         fprintf(stderr, "[-] Failed to open in-memory case database!\n");
@@ -408,6 +410,63 @@ static int run_deterministic_tests(void) {
     }
     qala_case_memory_close(mem);
     printf("  [PASS] Case memory indexed %d audit records; FTS5 BM25 queries answered.\n", indexed);
+
+    /* Milestone 9: SQLite FTS5 Policy RAG & Statutory Grounding */
+    printf("[MILESTONE 9/9] SQLite FTS5 Policy RAG & Statutory Grounding Verification...\n");
+    qala_policy_rag_t *rag = qala_policy_rag_open(":memory:");
+    if (!rag) {
+        fprintf(stderr, "[-] Failed to initialize Policy RAG database!\n");
+        return 17;
+    }
+    int corpus_indexed = qala_policy_rag_index_corpus(rag, "corpus/manifest.sha256");
+    if (corpus_indexed < 3) {
+        fprintf(stderr, "[-] Policy corpus manifest verification or indexing failed (got %d)\n", corpus_indexed);
+        qala_policy_rag_close(rag);
+        return 18;
+    }
+    qala_policy_rag_register_as_global_verifier(rag);
+
+    /* Test question answering */
+    qala_policy_chunk_t top_c;
+    grounding_result_t g_ans = qala_policy_rag_answer_and_verify(
+        rag, "what is the approval threshold and where is it defined?", &top_c
+    );
+    if (g_ans.verdict != GROUNDING_VERIFIED || strcmp(top_c.doc_id, "TAU3-FINOPS-POLICY-2026") != 0) {
+        fprintf(stderr, "[-] Policy RAG question verification failed! doc_id: %s\n", top_c.doc_id);
+        qala_policy_rag_close(rag);
+        return 19;
+    }
+
+    /* Test hard-stop gate: invalid hash fails closed */
+    qala_tool_call_ctx_t ctx_tamper = {
+        .tool_name = "fs_read",
+        .target_path = "/workspace/trade_docs/inv.json",
+        .amount_aed = 0.0,
+        .is_mutating = false,
+        .required_scope = NULL,
+        .supplied_code = NULL,
+        .cited_doc_id = "TAU3-FINOPS-POLICY-2026",
+        .cited_section = "Policy 3.1",
+        .cited_passage_sha256 = "0000000000000000000000000000000000000000000000000000000000000000"
+    };
+    qala_policy_result_t res_tamper = policy_verify_call(&ctx_tamper, NULL, 0, now_utc, "build/qala_test_audit.jsonl");
+    if (res_tamper.verdict != VERDICT_UNSAFE || strcmp(res_tamper.code, "policy_hash_mismatch") != 0) {
+        fprintf(stderr, "[-] Tampered policy passage hash was NOT blocked by hard-stop gate! Verdict: %d\n", res_tamper.verdict);
+        qala_policy_rag_close(rag);
+        return 20;
+    }
+
+    /* Test hard-stop gate: valid hash passes and commits to audit */
+    ctx_tamper.cited_passage_sha256 = top_c.passage_sha256;
+    qala_policy_result_t res_valid_cite = policy_verify_call(&ctx_tamper, NULL, 0, now_utc, "build/qala_test_audit.jsonl");
+    if (res_valid_cite.verdict != VERDICT_SAFE) {
+        fprintf(stderr, "[-] Authoritative policy citation was rejected! Verdict: %d\n", res_valid_cite.verdict);
+        qala_policy_rag_close(rag);
+        return 21;
+    }
+
+    qala_policy_rag_close(rag);
+    printf("  [PASS] Policy RAG indexed %d clauses; Judge query verified; Hard-stop gate enforced.\n", corpus_indexed);
 
     gettimeofday(&tv_end, NULL);
     double total_ms = (double)(tv_end.tv_sec - tv_start.tv_sec) * 1000.0 +
@@ -483,6 +542,8 @@ static void run_demo(void) {
 /* ========================================================================= */
 
 static int run_history_cli(const char *query);
+static int run_ask_cli(const char *question);
+static int run_policy_cli(const char *query);
 
 static void run_interactive(void) {
     print_banner();
@@ -512,8 +573,26 @@ static void run_interactive(void) {
             printf("  check_path <path>          Check path against DESC ISR v3.1 sandbox\n");
             printf("  verify_tx <aed> [token]    Evaluate Tau-3 FinOps policy gate on an amount\n");
             printf("  history <query>            Search prior decisions citing audit timestamp_utc\n");
+            printf("  ask <question>             Ask policy question answered by Policy RAG & Grounding Shield\n");
+            printf("  policy <query>             Search statutory policy corpus clauses via SQLite FTS5\n");
             printf("  status                     Display governance HUD status\n");
             printf("  exit                       Quit the interactive REPL\n");
+        } else if (strncmp(line, "ask ", 4) == 0) {
+            const char *q = line + 4;
+            while (*q == ' ') q++;
+            if (*q == '\0') {
+                printf("Usage: ask <question>\n");
+            } else {
+                run_ask_cli(q);
+            }
+        } else if (strncmp(line, "policy ", 7) == 0) {
+            const char *q = line + 7;
+            while (*q == ' ') q++;
+            if (*q == '\0') {
+                printf("Usage: policy <query>\n");
+            } else {
+                run_policy_cli(q);
+            }
         } else if (strncmp(line, "history ", 8) == 0) {
             const char *q = line + 8;
             while (*q == ' ') q++;
@@ -698,6 +777,75 @@ static int run_history_cli(const char *query) {
     return 0;
 }
 
+static int run_ask_cli(const char *question) {
+    if (!question || strlen(question) == 0) {
+        fprintf(stderr, "Error: Question required for statutory policy query.\n");
+        return 1;
+    }
+
+    qala_policy_rag_t *rag = qala_policy_rag_open(":memory:");
+    if (!rag) {
+        fprintf(stderr, "Error: Failed to initialize SQLite FTS5 Policy RAG.\n");
+        return 1;
+    }
+
+    int indexed = qala_policy_rag_index_corpus(rag, "corpus/manifest.sha256");
+    if (indexed <= 0) {
+        fprintf(stderr, "Warning: Could not index corpus from 'corpus/manifest.sha256' (indexed %d chunks).\n", indexed);
+    }
+
+    qala_policy_chunk_t top_chunk;
+    grounding_result_t verdict = qala_policy_rag_answer_and_verify(rag, question, &top_chunk);
+
+    char out[4096];
+    qala_policy_rag_format_results(question, &top_chunk, 1, out, sizeof(out));
+    printf("%s", out);
+
+    printf("         • Citation:           %s (%s, Page %d)\n",
+           top_chunk.doc_id, top_chunk.section, top_chunk.page);
+    printf("         • Authoritative Text: %s\n", top_chunk.passage_text);
+    printf("         • Passage SHA-256:    %s\n", top_chunk.passage_sha256);
+    printf("         • Verifier Verdict:   [%s] (Confidence: %.2f)\n",
+           verdict.verdict == GROUNDING_VERIFIED ? "GROUNDING_VERIFIED" :
+           verdict.verdict == GROUNDING_HALLUCINATION_TRIPPED ? "HALLUCINATION_TRIPPED" : "UNVERIFIABLE",
+           verdict.confidence);
+    if (verdict.discrepancy_note[0] != '\0') {
+        printf("         • Grounding Note:     %s\n", verdict.discrepancy_note);
+    }
+    printf("\n");
+
+    qala_policy_rag_close(rag);
+    return 0;
+}
+
+static int run_policy_cli(const char *query) {
+    if (!query || strlen(query) == 0) {
+        fprintf(stderr, "Error: Query required for statutory policy search.\n");
+        return 1;
+    }
+
+    qala_policy_rag_t *rag = qala_policy_rag_open(":memory:");
+    if (!rag) {
+        fprintf(stderr, "Error: Failed to initialize SQLite FTS5 Policy RAG.\n");
+        return 1;
+    }
+
+    int indexed = qala_policy_rag_index_corpus(rag, "corpus/manifest.sha256");
+    if (indexed <= 0) {
+        fprintf(stderr, "Warning: Could not index corpus from 'corpus/manifest.sha256' (indexed %d chunks).\n", indexed);
+    }
+
+    qala_policy_chunk_t chunks[8];
+    int count = qala_policy_rag_query(rag, query, chunks, 8);
+
+    char out[8192];
+    qala_policy_rag_format_results(query, chunks, (size_t)count, out, sizeof(out));
+    printf("%s\n", out);
+
+    qala_policy_rag_close(rag);
+    return 0;
+}
+
 /* ========================================================================= */
 /* 6. Main Entry Point                                                       */
 /* ========================================================================= */
@@ -721,6 +869,18 @@ int main(int argc, char **argv) {
                 return 1;
             }
             return run_history_cli(argv[2]);
+        } else if (strcmp(argv[1], "--ask") == 0 || strcmp(argv[1], "ask") == 0) {
+            if (argc < 3) {
+                fprintf(stderr, "Usage: %s --ask <question>\n", argv[0]);
+                return 1;
+            }
+            return run_ask_cli(argv[2]);
+        } else if (strcmp(argv[1], "--policy") == 0 || strcmp(argv[1], "policy") == 0) {
+            if (argc < 3) {
+                fprintf(stderr, "Usage: %s --policy <query>\n", argv[0]);
+                return 1;
+            }
+            return run_policy_cli(argv[2]);
         } else if (strcmp(argv[1], "--demo") == 0) {
             run_demo();
             return 0;
@@ -734,6 +894,8 @@ int main(int argc, char **argv) {
             printf("  --test                                Run deterministic acceptance suite (< 15 ms)\n");
             printf("  --verify-tx <amount> <approval_code>  Evaluate single transaction against Tau-3 FinOps gate\n");
             printf("  --history <query>                     Query SQLite FTS5 decision history citing timestamp_utc\n");
+            printf("  --ask <question>                      Ask statutory question answered by Policy RAG & Grounding Shield\n");
+            printf("  --policy <query>                      Search statutory policy corpus clauses via SQLite FTS5\n");
             printf("  --demo                                Run interactive enterprise trade demonstration\n");
             printf("  --interactive, -i                     Start interactive policy REPL\n");
             printf("  --help, -h                            Display this help menu\n");

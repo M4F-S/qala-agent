@@ -260,6 +260,10 @@ grounding_result_t grounding_verify_claim(
     bool found_hallucination = false;
     char hallucination_note[256] = "";
     char hallucination_citation[128] = "";
+    char hallucination_doc_id[64] = "";
+    char hallucination_section[64] = "";
+    int  hallucination_page = 0;
+    char hallucination_sha[65] = "";
 
     for (size_t i = 0; i < source_count; ++i) {
         /* Guard source fields */
@@ -268,7 +272,9 @@ grounding_result_t grounding_verify_claim(
         const char *s_id    = sources[i].source_id ? sources[i].source_id : "UNKNOWN_SOURCE";
 
         /* Check if authoritative source covers the claimed entity */
-        if (strcasestr_c99(s_title, claim->entity_name) != NULL ||
+        if ((s_id && strcasestr_c99(s_id, claim->entity_name) != NULL) ||
+            (sources[i].doc_id && strcasestr_c99(sources[i].doc_id, claim->entity_name) != NULL) ||
+            strcasestr_c99(s_title, claim->entity_name) != NULL ||
             strcasestr_c99(s_text, claim->entity_name) != NULL) {
 
             entity_found = true;
@@ -280,6 +286,10 @@ grounding_result_t grounding_verify_claim(
                     res.verdict = GROUNDING_HALLUCINATION_TRIPPED;
                     res.confidence = 0.99;
                     snprintf(res.citation, sizeof(res.citation), "%s", s_id);
+                    if (sources[i].doc_id) snprintf(res.doc_id, sizeof(res.doc_id), "%s", sources[i].doc_id);
+                    if (sources[i].section) snprintf(res.section, sizeof(res.section), "%s", sources[i].section);
+                    res.page = sources[i].page;
+                    if (sources[i].passage_sha256[0] != '\0') snprintf(res.passage_sha256, sizeof(res.passage_sha256), "%s", sources[i].passage_sha256);
                     snprintf(res.discrepancy_note, sizeof(res.discrepancy_note), "%s", "Discrepancy: Non-finite or NaN numerical value in claim.");
                     return res;
                 }
@@ -289,6 +299,10 @@ grounding_result_t grounding_verify_claim(
                     /* Record hallucination candidate, but continue scanning remaining sources in case of multiple sections */
                     found_hallucination = true;
                     snprintf(hallucination_citation, sizeof(hallucination_citation), "%s", s_id);
+                    if (sources[i].doc_id) snprintf(hallucination_doc_id, sizeof(hallucination_doc_id), "%s", sources[i].doc_id);
+                    if (sources[i].section) snprintf(hallucination_section, sizeof(hallucination_section), "%s", sources[i].section);
+                    hallucination_page = sources[i].page;
+                    if (sources[i].passage_sha256[0] != '\0') snprintf(hallucination_sha, sizeof(hallucination_sha), "%s", sources[i].passage_sha256);
                     snprintf(hallucination_note, sizeof(hallucination_note),
                              "Discrepancy: Claim states %.4f, but authoritative %s mandates %.4f.",
                              claim->numerical_value, s_id, sources[i].source_numerical);
@@ -300,6 +314,12 @@ grounding_result_t grounding_verify_claim(
             res.verdict = GROUNDING_VERIFIED;
             res.confidence = 0.98;
             snprintf(res.citation, sizeof(res.citation), "%s", s_id);
+            if (sources[i].doc_id) snprintf(res.doc_id, sizeof(res.doc_id), "%s", sources[i].doc_id);
+            if (sources[i].section) snprintf(res.section, sizeof(res.section), "%s", sources[i].section);
+            res.page = sources[i].page;
+            if (sources[i].passage_sha256[0] != '\0') {
+                snprintf(res.passage_sha256, sizeof(res.passage_sha256), "%s", sources[i].passage_sha256);
+            }
             snprintf(res.discrepancy_note, sizeof(res.discrepancy_note),
                      "Verified against authoritative source %s.", s_id);
             return res;
@@ -311,6 +331,10 @@ grounding_result_t grounding_verify_claim(
         res.confidence = 0.99;
         snprintf(res.citation, sizeof(res.citation), "%s", hallucination_citation);
         snprintf(res.discrepancy_note, sizeof(res.discrepancy_note), "%s", hallucination_note);
+        if (hallucination_doc_id[0] != '\0') snprintf(res.doc_id, sizeof(res.doc_id), "%s", hallucination_doc_id);
+        if (hallucination_section[0] != '\0') snprintf(res.section, sizeof(res.section), "%s", hallucination_section);
+        res.page = hallucination_page;
+        if (hallucination_sha[0] != '\0') snprintf(res.passage_sha256, sizeof(res.passage_sha256), "%s", hallucination_sha);
         return res;
     }
 
@@ -412,6 +436,30 @@ int main(void) {
     assert(strstr(redacted, "0.5mg") != NULL);
     assert(strstr(redacted, "Clarithromycin 500mg") != NULL);
     assert(strstr(redacted, "eGFR = 22") != NULL);
+
+    /* Test 6: Policy RAG verification returns doc_id, section, page, and passage_sha256 */
+    grounding_source_t rag_sources[1] = {{
+        .source_id = "TAU3_FINOPS_SEC_3.1",
+        .source_title = "Tau-3 FinOps Transaction Ceiling Policy",
+        .snippet_text = "The automated approval ceiling for autonomous agents is AED 50,000.00.",
+        .source_numerical = 50000.00,
+        .doc_id = "TAU3-FINOPS-POLICY-2026",
+        .section = "Policy 3.1",
+        .page = 15,
+        .passage_sha256 = "85151618844da4002def9461e2844f560a7c81ae23b2578a62da19ebaa67dbc5"
+    }};
+    grounding_claim_t thresh_claim = {
+        .claim_text = "Tau-3 FinOps threshold is AED 50,000.00",
+        .entity_name = "Tau-3 FinOps",
+        .numerical_value = 50000.00,
+        .has_numerical = true
+    };
+    grounding_result_t r6 = grounding_verify_claim(&thresh_claim, rag_sources, 1);
+    assert(r6.verdict == GROUNDING_VERIFIED);
+    assert(strcmp(r6.doc_id, "TAU3-FINOPS-POLICY-2026") == 0);
+    assert(strcmp(r6.section, "Policy 3.1") == 0);
+    assert(r6.page == 15);
+    assert(strcmp(r6.passage_sha256, "85151618844da4002def9461e2844f560a7c81ae23b2578a62da19ebaa67dbc5") == 0);
 
     printf("[PASS] All Grounding Shield C99 PII-Scrubbing & Factual Verification tests passed!\n");
     return 0;

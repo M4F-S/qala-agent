@@ -34,24 +34,34 @@ typedef struct {
 
 /* Tool call inspection context */
 typedef struct {
-    const char               *tool_name;        /* e.g., "fs_read", "erp_customs_settlement" */
-    const char               *target_path;      /* Target filesystem path */
-    const char               *raw_args_json;    /* Raw JSON arguments payload */
-    double                    amount_aed;       /* Transaction value in AED */
-    bool                      is_mutating;      /* True if tool modifies state/database/APIs */
-    const char               *required_scope;   /* Required scope token */
-    const char               *supplied_code;    /* Approval code supplied by caller */
-    const grounding_claim_t  *grounding_claim;  /* Optional factual claim to verify */
-    const grounding_source_t *grounding_corpus; /* Retrieved authoritative references */
-    size_t                    grounding_count;  /* Number of grounding reference sources */
+    const char               *tool_name;            /* e.g., "fs_read", "erp_customs_settlement" */
+    const char               *target_path;          /* Target filesystem path */
+    const char               *raw_args_json;        /* Raw JSON arguments payload */
+    double                    amount_aed;           /* Transaction value in AED */
+    bool                      is_mutating;          /* True if tool modifies state/database/APIs */
+    const char               *required_scope;       /* Required scope token */
+    const char               *supplied_code;        /* Approval code supplied by caller */
+    const grounding_claim_t  *grounding_claim;      /* Optional factual claim to verify */
+    const grounding_source_t *grounding_corpus;     /* Retrieved authoritative references */
+    size_t                    grounding_count;      /* Number of grounding reference sources */
+    const char               *cited_doc_id;         /* Optional cited policy document ID */
+    const char               *cited_section;        /* Optional cited policy section */
+    const char               *cited_passage_sha256; /* SHA-256 hash of cited policy passage */
 } qala_tool_call_ctx_t;
 
 /* Result envelope */
 typedef struct {
     qala_verdict_t verdict;
-    char           code[64];      /* Contract error code */
-    char           reason[256];   /* Human & HUD explanation */
+    char           code[64];            /* Contract error code */
+    char           reason[256];         /* Human & HUD explanation */
+    char           cited_doc_id[64];    /* Verified policy document ID */
+    char           cited_section[64];   /* Verified policy section */
+    char           passage_sha256[65];  /* Verified passage SHA-256 hash */
 } qala_policy_result_t;
+
+/* Policy Citation Verifier Hook (Optional Global Hook for Policy RAG) */
+typedef bool (*qala_policy_hash_verifier_fn)(const char *doc_id, const char *section, const char *passage_sha256);
+void qala_set_policy_hash_verifier(qala_policy_hash_verifier_fn fn);
 
 /* Function Prototypes */
 qala_policy_result_t policy_verify_call(

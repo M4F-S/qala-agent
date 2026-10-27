@@ -495,6 +495,13 @@ static const char *verdict_to_str(qala_verdict_t v) {
     }
 }
 
+/* Global Policy RAG Hash Verifier Hook */
+static qala_policy_hash_verifier_fn g_policy_hash_verifier = NULL;
+
+void qala_set_policy_hash_verifier(qala_policy_hash_verifier_fn fn) {
+    g_policy_hash_verifier = fn;
+}
+
 /* F-10 Fix: Immutable append-only JSONL audit logger with finite amount checks */
 static void write_desc_audit_log(
     const char                 *log_path,
@@ -515,16 +522,47 @@ static void write_desc_audit_log(
 
     double safe_amount = (ctx && isfinite(ctx->amount_aed)) ? ctx->amount_aed : 0.0;
 
-    fprintf(fp,
-        "{\"timestamp_utc\":%llu,\"reporting_tz\":\"Asia/Dubai\",\"tool\":\"%s\","
-        "\"verdict\":\"%s\",\"code\":\"%s\",\"reason\":\"%s\",\"amount_aed\":%.2f}\n",
-        (unsigned long long)timestamp_utc,
-        esc_tool,
-        verdict_to_str(res ? res->verdict : VERDICT_ERROR),
-        esc_code,
-        esc_reason,
-        safe_amount
-    );
+    const char *doc = (res && res->cited_doc_id[0] != '\0') ? res->cited_doc_id :
+                      (ctx && ctx->cited_doc_id) ? ctx->cited_doc_id : NULL;
+    const char *sec = (res && res->cited_section[0] != '\0') ? res->cited_section :
+                      (ctx && ctx->cited_section) ? ctx->cited_section : NULL;
+    const char *sha = (res && res->passage_sha256[0] != '\0') ? res->passage_sha256 :
+                      (ctx && ctx->cited_passage_sha256) ? ctx->cited_passage_sha256 : NULL;
+
+    if (sha && sha[0] != '\0') {
+        char full_citation[128];
+        snprintf(full_citation, sizeof(full_citation), "%s%s%s",
+                 doc ? doc : "policy", sec ? "#" : "", sec ? sec : "");
+        char esc_cite[128];
+        char esc_sha[128];
+        json_escape_string(full_citation, esc_cite, sizeof(esc_cite));
+        json_escape_string(sha, esc_sha, sizeof(esc_sha));
+
+        fprintf(fp,
+            "{\"timestamp_utc\":%llu,\"reporting_tz\":\"Asia/Dubai\",\"tool\":\"%s\","
+            "\"verdict\":\"%s\",\"code\":\"%s\",\"reason\":\"%s\",\"amount_aed\":%.2f,"
+            "\"citation\":\"%s\",\"passage_sha256\":\"%s\"}\n",
+            (unsigned long long)timestamp_utc,
+            esc_tool,
+            verdict_to_str(res ? res->verdict : VERDICT_ERROR),
+            esc_code,
+            esc_reason,
+            safe_amount,
+            esc_cite,
+            esc_sha
+        );
+    } else {
+        fprintf(fp,
+            "{\"timestamp_utc\":%llu,\"reporting_tz\":\"Asia/Dubai\",\"tool\":\"%s\","
+            "\"verdict\":\"%s\",\"code\":\"%s\",\"reason\":\"%s\",\"amount_aed\":%.2f}\n",
+            (unsigned long long)timestamp_utc,
+            esc_tool,
+            verdict_to_str(res ? res->verdict : VERDICT_ERROR),
+            esc_code,
+            esc_reason,
+            safe_amount
+        );
+    }
     fclose(fp);
 }
 
@@ -569,6 +607,51 @@ qala_policy_result_t policy_verify_call(
             snprintf(res.code, sizeof(res.code), "%s", "grounding_hallucination_blocked");
             snprintf(res.reason, sizeof(res.reason),
                      "Grounding Shield Intercept: %.220s", g_res.discrepancy_note);
+            write_desc_audit_log(audit_log_path, now_utc, ctx, &res);
+            return res;
+        }
+    }
+
+    /* 2.5 Policy Citation Integrity Hard-Stop Gate:
+     * Tool calls citing policy must carry the passage hash; mismatched hashes fail closed.
+     */
+    if (ctx->cited_passage_sha256 && ctx->cited_passage_sha256[0] != '\0') {
+        bool hash_verified = false;
+
+        /* Verify against supplied grounding corpus */
+        if (ctx->grounding_corpus && ctx->grounding_count > 0) {
+            for (size_t i = 0; i < ctx->grounding_count; ++i) {
+                if (ctx->grounding_corpus[i].passage_sha256[0] != '\0' &&
+                    constant_time_streq(ctx->grounding_corpus[i].passage_sha256, ctx->cited_passage_sha256)) {
+                    hash_verified = true;
+                    if (ctx->grounding_corpus[i].doc_id) {
+                        snprintf(res.cited_doc_id, sizeof(res.cited_doc_id), "%s", ctx->grounding_corpus[i].doc_id);
+                    }
+                    if (ctx->grounding_corpus[i].section) {
+                        snprintf(res.cited_section, sizeof(res.cited_section), "%s", ctx->grounding_corpus[i].section);
+                    }
+                    snprintf(res.passage_sha256, sizeof(res.passage_sha256), "%s", ctx->cited_passage_sha256);
+                    break;
+                }
+            }
+        }
+
+        /* Verify against registered global Policy RAG verifier */
+        if (!hash_verified && g_policy_hash_verifier) {
+            if (g_policy_hash_verifier(ctx->cited_doc_id, ctx->cited_section, ctx->cited_passage_sha256)) {
+                hash_verified = true;
+                if (ctx->cited_doc_id) snprintf(res.cited_doc_id, sizeof(res.cited_doc_id), "%s", ctx->cited_doc_id);
+                if (ctx->cited_section) snprintf(res.cited_section, sizeof(res.cited_section), "%s", ctx->cited_section);
+                snprintf(res.passage_sha256, sizeof(res.passage_sha256), "%s", ctx->cited_passage_sha256);
+            }
+        }
+
+        if (!hash_verified) {
+            res.verdict = VERDICT_UNSAFE;
+            snprintf(res.code, sizeof(res.code), "%s", "policy_hash_mismatch");
+            snprintf(res.reason, sizeof(res.reason),
+                     "Hard-stop: Cited policy hash '%.32s...' does not match authoritative corpus.",
+                     ctx->cited_passage_sha256);
             write_desc_audit_log(audit_log_path, now_utc, ctx, &res);
             return res;
         }
@@ -943,6 +1026,52 @@ int main(void) {
     qala_policy_result_t r13c = policy_verify_call(&persist_ctx, reboot_slots, 1, 1792600000ULL, NULL);
     assert(r13c.verdict == VERDICT_UNSAFE);
     assert(strcmp(r13c.code, "invalid_or_expired_approval") == 0);
+
+    /* Test 14: Policy Citation Hard-Stop Gate (Fail-Closed on Hash Mismatch) */
+    grounding_source_t auth_corpus[1] = {{
+        .source_id = "DESC_ISR_V3.1_DOM_14.1",
+        .source_title = "DESC ISR v3.1 Containment Standard",
+        .snippet_text = "Execution environments must restrict filesystem access strictly to authorized workspace roots.",
+        .doc_id = "DESC-ISR-V3.1",
+        .section = "Domain 14.1",
+        .passage_sha256 = "11223344556677889900aabbccddeeff11223344556677889900aabbccddeeff"
+    }};
+    qala_tool_call_ctx_t policy_cite_ctx = {
+        .tool_name = "fs_read",
+        .target_path = "/workspace/settlements/batch_2026.json",
+        .raw_args_json = NULL,
+        .amount_aed = 0.0,
+        .is_mutating = false,
+        .required_scope = NULL,
+        .supplied_code = NULL,
+        .grounding_claim = NULL,
+        .grounding_corpus = auth_corpus,
+        .grounding_count = 1,
+        .cited_doc_id = "DESC-ISR-V3.1",
+        .cited_section = "Domain 14.1",
+        .cited_passage_sha256 = "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef" /* Altered/mismatched hash */
+    };
+    qala_policy_result_t r14_mismatch = policy_verify_call(&policy_cite_ctx, reboot_slots, 1, 1792600000ULL, NULL);
+    assert(r14_mismatch.verdict == VERDICT_UNSAFE);
+    assert(strcmp(r14_mismatch.code, "policy_hash_mismatch") == 0);
+
+    /* Test 15: Policy Citation Hard-Stop Gate (Verified Hash Passed & Audited) */
+    const char *test_cite_audit = "build/test_cite_audit.jsonl";
+    unlink(test_cite_audit);
+    policy_cite_ctx.cited_passage_sha256 = "11223344556677889900aabbccddeeff11223344556677889900aabbccddeeff";
+    qala_policy_result_t r15_match = policy_verify_call(&policy_cite_ctx, reboot_slots, 1, 1792600000ULL, test_cite_audit);
+    assert(r15_match.verdict == VERDICT_SAFE);
+    assert(strcmp(r15_match.passage_sha256, "11223344556677889900aabbccddeeff11223344556677889900aabbccddeeff") == 0);
+
+    /* Verify audit log contains passage_sha256 and citation */
+    FILE *cite_fp = fopen(test_cite_audit, "r");
+    assert(cite_fp != NULL);
+    char audit_buf[1024];
+    assert(fgets(audit_buf, sizeof(audit_buf), cite_fp) != NULL);
+    fclose(cite_fp);
+    unlink(test_cite_audit);
+    assert(strstr(audit_buf, "\"passage_sha256\":\"11223344556677889900aabbccddeeff11223344556677889900aabbccddeeff\"") != NULL);
+    assert(strstr(audit_buf, "\"citation\":\"DESC-ISR-V3.1#Domain 14.1\"") != NULL);
 
     unlink(test_token_store);
     unlink(init_test_tokens);

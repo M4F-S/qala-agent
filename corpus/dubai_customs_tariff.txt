@@ -1,0 +1,26 @@
+=== SECTION ===
+doc_id: DUBAI-CUSTOMS-TARIFF-2026
+doc_title: Dubai Customs and GCC Common Customs Tariff Schedule
+section: Article 1
+section_title: GCC Unified Customs Tariff Standard Duty Rate
+page: 12
+numerical: 0.05
+text: A standard customs tariff rate of 5.0% (0.0500) applies to all commercial goods imported into UAE mainland on declared Cost, Insurance, and Freight (CIF) valuation, unless explicitly exempt under GCC unified agreements.
+
+=== SECTION ===
+doc_id: DUBAI-CUSTOMS-TARIFF-2026
+doc_title: Dubai Customs and GCC Common Customs Tariff Schedule
+section: Article 5
+section_title: Import Container Clearance and Release Order Issuance
+page: 34
+numerical: 0.00
+text: Clearance declarations submitted via Dubai Customs Mirsal II or DP World terminals require verified shipping documentation, container identifier, and bill of lading before an electronic Release Order (RO) may be issued.
+
+=== SECTION ===
+doc_id: DUBAI-CUSTOMS-TARIFF-2026
+doc_title: Dubai Customs and GCC Common Customs Tariff Schedule
+section: Article 12
+section_title: UAE Federal Tax Authority Statutory Import VAT
+page: 68
+numerical: 0.05
+text: Statutory Value Added Tax (VAT) at the rate of 5.0% (0.0500) shall be levied on the sum of the CIF value plus customs duty for all taxable imports into the UAE mainland.
