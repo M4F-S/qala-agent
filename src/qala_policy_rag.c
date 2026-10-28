@@ -27,6 +27,17 @@ struct qala_policy_rag {
 
 static qala_policy_rag_t *g_global_rag_instance = NULL;
 
+/* Bounded, always-NUL-terminated copy. Replaces snprintf(dst, cap, "%s", src),
+ * which GCC rightly rejects at -O2 -Werror because src may exceed cap. */
+static void qala_copy_field(char *dst, size_t cap, const char *src) {
+    size_t n;
+    if (!dst || cap == 0) return;
+    n = src ? strlen(src) : 0;
+    if (n >= cap) n = cap - 1;
+    if (n) memcpy(dst, src, n);
+    dst[n] = '\0';
+}
+
 static bool global_policy_hash_verifier_bridge(const char *doc_id, const char *section, const char *passage_sha256) {
     if (!g_global_rag_instance) return false;
     return qala_policy_rag_verify_hash(g_global_rag_instance, doc_id, section, passage_sha256);
@@ -223,20 +234,20 @@ int qala_policy_rag_index_file(qala_policy_rag_t *rag, const char *file_path) {
         if (!in_section) continue;
 
         if (strncmp(line, "doc_id: ", 8) == 0) {
-            snprintf(cur_doc_id, sizeof(cur_doc_id), "%s", line + 8);
+            qala_copy_field(cur_doc_id, sizeof(cur_doc_id), line + 8);
         } else if (strncmp(line, "doc_title: ", 11) == 0) {
-            snprintf(cur_doc_title, sizeof(cur_doc_title), "%s", line + 11);
+            qala_copy_field(cur_doc_title, sizeof(cur_doc_title), line + 11);
         } else if (strncmp(line, "section: ", 9) == 0) {
-            snprintf(cur_section, sizeof(cur_section), "%s", line + 9);
+            qala_copy_field(cur_section, sizeof(cur_section), line + 9);
         } else if (strncmp(line, "section_title: ", 15) == 0) {
-            snprintf(cur_section_title, sizeof(cur_section_title), "%s", line + 15);
+            qala_copy_field(cur_section_title, sizeof(cur_section_title), line + 15);
         } else if (strncmp(line, "page: ", 6) == 0) {
             cur_page = atoi(line + 6);
         } else if (strncmp(line, "numerical: ", 11) == 0) {
             cur_numerical = atof(line + 11);
             cur_has_numerical = (cur_numerical != 0.0);
         } else if (strncmp(line, "text: ", 6) == 0) {
-            snprintf(cur_text, sizeof(cur_text), "%s", line + 6);
+            qala_copy_field(cur_text, sizeof(cur_text), line + 6);
             cur_text_len = strlen(cur_text);
         }
     }
