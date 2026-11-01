@@ -30,7 +30,7 @@ make -C "$SCRIPT_DIR" clean >/dev/null 2>&1 || true
 if [[ -n "$GDRIVE_ROOT" && -d "$GDRIVE_ROOT" ]]; then
     echo "[2/3] Mirroring to Google Drive ($GDRIVE_DIR)..."
     mkdir -p "$GDRIVE_DIR"
-    RSYNC_OPTS=(-av --exclude=".git" --exclude="build" --exclude="*.dylib" --exclude="*.so" --exclude="*.o" --exclude="*.jsonl" --exclude="__pycache__")
+    RSYNC_OPTS=(-av --exclude=".git" --exclude="build" --exclude="target" --exclude="*.dylib" --exclude="*.so" --exclude="*.o" --exclude="*.jsonl" --exclude="__pycache__")
     if [[ "${FORCE:-0}" == "1" ]]; then
         RSYNC_OPTS+=(--delete)
     fi
@@ -51,6 +51,9 @@ EXPLICIT_PATHS=(
     "corpus"
     "docs"
     ".github"
+    "Cargo.toml"
+    "Cargo.lock"
+    "build.rs"
     "Makefile"
     "README.md"
     "PLAN.md"
